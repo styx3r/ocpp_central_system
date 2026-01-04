@@ -1,0 +1,38 @@
+log_directory = "."
+
+[[id_tags]]
+id = ""
+
+[websocket]
+ip = "0.0.0.0"
+port = 8080
+
+[charging_point]
+# SerialNumber of the ChargingPoint where the following settings apply.
+serial_number = ""
+heartbeat_interval = 60
+
+# Maximum charging power which shall be offered by the ChargingPoint. This will be set as
+# default ChargingProfile.
+max_charging_power = 11000
+
+# Default system voltage is assumed to be sqrt(3) * 400V for 3 phase AC systems.
+default_system_voltage = 693
+
+# Default max current in A.
+default_current = 16.0
+
+# Default cos(phi) which is assumed to be like it's for an ohmic load.
+default_cos_phi = 0.99
+
+# Minimum charging current supported by the EV.
+minimum_charging_current = 6.0
+
+# Array of ConfigParameters to be set upon successful connection.
+[[charging_point.config_parameters]]
+key = "MeterValueSampleInterval"
+value = "10"
+
+[[charging_point.config_parameters]]
+key = "MeterValuesSampledData"
+value = "Power.Offered,Current.Offered,Voltage.L1,Voltage.L2,Voltage.L3"
