@@ -26,8 +26,8 @@ mod tests {
 
     #[test]
     fn status_notification() -> Result<(), CustomError> {
-        let response = handle_status_notification_request(
-            &status_notification::StatusNotificationRequest {
+        let response =
+            handle_status_notification_request(&status_notification::StatusNotificationRequest {
                 connector_id: UNITTEST_CONNECTOR_ID,
                 error_code: rust_ocpp::v1_6::types::ChargePointErrorCode::NoError,
                 info: None,
@@ -35,8 +35,7 @@ mod tests {
                 timestamp: None,
                 vendor_id: None,
                 vendor_error_code: None,
-            },
-        )?;
+            })?;
 
         assert_eq!(response, status_notification::StatusNotificationResponse {});
 

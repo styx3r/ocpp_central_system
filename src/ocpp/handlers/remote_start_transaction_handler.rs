@@ -1,7 +1,7 @@
 use rust_ocpp::v1_6::messages::remote_start_transaction;
 use rust_ocpp::v1_6::types::RemoteStartStopStatus;
 
-use log::{error, info, warn};
+use log::{info, warn};
 
 use crate::ocpp::ChargePointState;
 

@@ -10,7 +10,7 @@ use crate::ocpp::ChargePointState;
 pub(crate) fn handle_set_charging_profile_response(
     response_uuid: &String,
     set_charging_profile_response: &set_charging_profile::SetChargingProfileResponse,
-    charge_point_state: &mut ChargePointState
+    charge_point_state: &mut ChargePointState,
 ) {
     match set_charging_profile_response.status {
         ChargingProfileStatus::Accepted => {

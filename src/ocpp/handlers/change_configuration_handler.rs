@@ -3,7 +3,7 @@ use crate::ocpp::ChargePointState;
 use rust_ocpp::v1_6::messages::change_configuration;
 use rust_ocpp::v1_6::types::ConfigurationStatus;
 
-use log::{info, warn, error};
+use log::{error, info, warn};
 
 //-------------------------------------------------------------------------------------------------
 
@@ -43,5 +43,3 @@ pub(crate) fn handle_change_configuration_response(
         .requests_awaiting_confirmation
         .retain(|e| *e.uuid != *response_uuid);
 }
-
-//-------------------------------------------------------------------------------------------------

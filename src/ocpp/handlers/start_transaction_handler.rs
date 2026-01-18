@@ -40,6 +40,8 @@ pub(crate) fn handle_start_transaction_request(
     Ok(start_transaction_response)
 }
 
+//-------------------------------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,7 +61,7 @@ mod tests {
                 timestamp: chrono::offset::Utc::now(),
             },
             &vec![],
-            &mut charge_point_state
+            &mut charge_point_state,
         )?;
 
         assert_eq!(

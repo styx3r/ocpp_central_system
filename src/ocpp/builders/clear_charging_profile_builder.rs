@@ -5,6 +5,8 @@ use super::MessageBuilder;
 use rust_ocpp::v1_6::messages;
 use rust_ocpp::v1_6::types::ChargingProfilePurposeType;
 
+//-------------------------------------------------------------------------------------------------
+
 pub(crate) struct ClearChargingProfileBuilder {
     id: Option<i32>,
     connector_id: Option<i32>,
@@ -44,6 +46,8 @@ impl ClearChargingProfileBuilder {
         }
     }
 }
+
+//-------------------------------------------------------------------------------------------------
 
 impl MessageBuilder<messages::clear_charging_profile::ClearChargingProfileRequest>
     for ClearChargingProfileBuilder

@@ -18,6 +18,8 @@ pub(crate) fn handle_firmware_status_notification_request(
     Ok(firmware_status_notification::FirmwareStatusNotificationResponse {})
 }
 
+//-------------------------------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;

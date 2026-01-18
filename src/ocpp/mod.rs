@@ -8,7 +8,7 @@ use log::{debug, error, info};
 use rusqlite::{Connection, Result};
 use std::process::exit;
 use std::{error::Error, net::TcpListener};
-use tungstenite::accept;
+use tungstenite::{Utf8Bytes, accept};
 
 use crate::config::Config;
 use crate::ocpp::ocpp_types::MessageTypeName;
@@ -41,6 +41,31 @@ struct ChargePointState {
     requests_to_send: Vec<RequestToSend>,
     requests_awaiting_confirmation: Vec<RequestToSend>,
     running_transactions: Vec<Transaction>,
+}
+
+//-------------------------------------------------------------------------------------------------
+
+fn dispatch_message(ocpp_central_system: &mut OCPPCentralSystem, text: &Utf8Bytes) -> Vec<String> {
+    let mut response_messages: Vec<String> = vec![];
+    match ocpp_central_system.process_text_message(&text) {
+        Ok(result) => {
+            if !result.is_empty() {
+                response_messages.push(result);
+            }
+        }
+        Err(e) => {
+            error!("Failed to process message: {}", e);
+        }
+    }
+
+    match ocpp_central_system.get_pending_message() {
+        Some(pending_message) => {
+            response_messages.push(pending_message.payload);
+        }
+        _ => {}
+    }
+
+    response_messages
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -85,7 +110,7 @@ pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
         let mut ocpp_central_system = OCPPCentralSystem::new(
             db_connection,
             peer_address,
-            config.clone(),
+            config.to_owned(),
             &mut charge_point_state,
         );
 
@@ -106,27 +131,12 @@ pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
             let msg = websocket.read().unwrap();
             match msg {
                 tungstenite::Message::Text(text) => {
-                    match ocpp_central_system.process_text_message(&text) {
-                        Ok(result) => {
-                            if result.is_empty() {
-                                continue;
-                            }
-
-                            info!("Responding with {}", result);
-                            websocket.send(tungstenite::Message::text(result))?;
-                        }
-                        Err(e) => {
-                            error!("Failed to process message: {}", e);
-                        }
-                    }
-
-                    match ocpp_central_system.get_pending_message() {
-                        Some(pending_message) => {
-                            info!("Sending pending message {}", pending_message.payload);
-                            websocket.send(tungstenite::Message::text(pending_message.payload))?;
-                        }
-                        _ => {}
-                    }
+                    dispatch_message(&mut ocpp_central_system, &text)
+                        .iter()
+                        .try_for_each(|message| -> Result<(), Box<dyn Error>> {
+                            info!("Sending {}", message);
+                            Ok(websocket.send(tungstenite::Message::text(message))?)
+                        })?;
                 }
                 tungstenite::Message::Ping(ping) => {
                     websocket.send(tungstenite::Message::Pong(ping))?;

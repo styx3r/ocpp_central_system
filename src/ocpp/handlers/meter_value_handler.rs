@@ -2,19 +2,16 @@ use crate::config;
 use crate::ocpp::builders::{
     MessageBuilder, set_charging_profile_builder::SetChargingProfileBuilder,
 };
-use crate::ocpp::ocpp_types::{CustomError, MessageTypeName, serialze_ocpp_request};
+use crate::ocpp::ocpp_types::{CustomError, MessageTypeName};
 use crate::ocpp::{ChargePointState, RequestToSend};
 
-use env_logger::builder;
-use rust_ocpp::v1_6::messages::{meter_values, set_charging_profile};
+use rust_ocpp::v1_6::messages::meter_values;
 use rust_ocpp::v1_6::types::{
-    ChargingProfile, ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType,
-    ChargingSchedule, ChargingSchedulePeriod, Location, MeterValue, Phase, SampledValue,
-    UnitOfMeasure,
+    ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType, Location,
+    MeterValue, Phase, SampledValue, UnitOfMeasure,
 };
 
 use rust_decimal::Decimal;
-use uuid::Uuid;
 
 use log::info;
 

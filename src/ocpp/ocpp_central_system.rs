@@ -43,7 +43,7 @@ use crate::ocpp::{
 };
 
 use crate::config::Config;
-use log::{error, info};
+use log::info;
 
 use rusqlite::Connection;
 use tungstenite::Utf8Bytes;
@@ -224,6 +224,8 @@ impl<'a> OCPPCentralSystem<'a> {
             .is_empty()
     }
 }
+
+//-------------------------------------------------------------------------------------------------
 
 impl Visitor<Result<String, CustomError>> for OCPPCentralSystem<'_> {
     fn visit_request_message(

@@ -5,6 +5,8 @@ use crate::ocpp::builders::MessageBuilder;
 use rust_ocpp::v1_6::messages;
 use rust_ocpp::v1_6::types::MessageTrigger;
 
+//-------------------------------------------------------------------------------------------------
+
 pub(crate) struct TriggerMessageBuilder {
     trigger_message: MessageTrigger,
     connector_id: Option<u32>,
@@ -24,6 +26,8 @@ impl TriggerMessageBuilder {
     }
 }
 
+//-------------------------------------------------------------------------------------------------
+
 impl MessageBuilder<messages::trigger_message::TriggerMessageRequest> for TriggerMessageBuilder {
     fn get_message_type_name(&self) -> MessageTypeName {
         self.message_type_name.clone()
@@ -32,9 +36,11 @@ impl MessageBuilder<messages::trigger_message::TriggerMessageRequest> for Trigge
     fn get_message_request(
         &self,
     ) -> Result<messages::trigger_message::TriggerMessageRequest, CustomError> {
-        self.trigger_message_request.clone().ok_or(CustomError::Common(
-            ".build() has not been called!".to_owned(),
-        ))
+        self.trigger_message_request
+            .clone()
+            .ok_or(CustomError::Common(
+                ".build() has not been called!".to_owned(),
+            ))
     }
 
     fn build(&mut self) -> &mut Self {

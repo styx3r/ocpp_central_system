@@ -52,7 +52,9 @@ mod tests {
             &authorize::AuthorizeRequest {
                 id_tag: UNITTEST_ID_TAG.to_owned(),
             },
-            &vec![ IdTag { id: UNITTEST_ID_TAG.to_owned() }],
+            &vec![IdTag {
+                id: UNITTEST_ID_TAG.to_owned(),
+            }],
         )?;
 
         assert_eq!(response.id_tag_info.status, AuthorizationStatus::Accepted);

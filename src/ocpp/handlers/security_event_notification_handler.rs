@@ -6,7 +6,7 @@ use rust_ocpp::v2_0_1::messages::security_event_notification;
 //-------------------------------------------------------------------------------------------------
 
 pub(crate) fn handle_security_event_notification_request(
-    security_event_notification_request: &security_event_notification::SecurityEventNotificationRequest
+    security_event_notification_request: &security_event_notification::SecurityEventNotificationRequest,
 ) -> Result<security_event_notification::SecurityEventNotificationResponse, CustomError> {
     warn!(
         "Received {} with context: {:?}",

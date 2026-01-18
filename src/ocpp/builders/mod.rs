@@ -1,9 +1,9 @@
 use crate::ocpp::ocpp_types::{CustomError, MessageTypeName, serialze_ocpp_request};
 
-pub(crate) mod trigger_message_builder;
 pub(crate) mod change_configuration_builder;
 pub(crate) mod clear_charging_profile_builder;
 pub(crate) mod set_charging_profile_builder;
+pub(crate) mod trigger_message_builder;
 
 use uuid::Uuid;
 

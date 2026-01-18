@@ -138,7 +138,7 @@ pub struct OcppErrorMessage {
 pub enum OcppMessage {
     Request(OcppRequestMessage),
     Response(OcppResponseMessage),
-    Error(OcppErrorMessage)
+    Error(OcppErrorMessage),
 }
 
 //-------------------------------------------------------------------------------------------------

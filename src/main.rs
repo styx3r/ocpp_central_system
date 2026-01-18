@@ -1,5 +1,5 @@
-use std::fs;
 use std::error::Error;
+use std::fs;
 use std::path::Path;
 
 mod config;
@@ -12,6 +12,8 @@ use log::LevelFilter;
 
 use clap::Parser;
 
+//-------------------------------------------------------------------------------------------------
+
 /// OCPP central management system.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -20,6 +22,8 @@ struct Args {
     #[arg(short, long)]
     config_path: String,
 }
+
+//-------------------------------------------------------------------------------------------------
 
 struct CustomLogger {
     config: ftail::Config,
@@ -42,6 +46,8 @@ impl log::Log for CustomLogger {
 
     fn flush(&self) {}
 }
+
+//-------------------------------------------------------------------------------------------------
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();

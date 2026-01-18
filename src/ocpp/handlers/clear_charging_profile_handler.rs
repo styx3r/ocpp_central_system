@@ -31,5 +31,3 @@ pub(crate) fn handle_clear_charging_profile_response(
         .requests_awaiting_confirmation
         .retain(|e| *e.uuid != *response_uuid);
 }
-
-//-------------------------------------------------------------------------------------------------

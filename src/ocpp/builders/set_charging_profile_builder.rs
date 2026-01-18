@@ -9,6 +9,8 @@ use rust_ocpp::v1_6::types::{
     ChargingSchedule, ChargingSchedulePeriod,
 };
 
+//-------------------------------------------------------------------------------------------------
+
 pub(crate) struct SetChargingProfileBuilder {
     connector_id: i32,
     charging_profile: ChargingProfile,
@@ -17,7 +19,6 @@ pub(crate) struct SetChargingProfileBuilder {
     set_charging_profile_request: Option<messages::set_charging_profile::SetChargingProfileRequest>,
 }
 
-// TODO(styx3r): Check if some setter functions make the usage cleaner
 impl SetChargingProfileBuilder {
     pub(crate) fn new(
         connector_id: i32,
@@ -68,6 +69,8 @@ impl SetChargingProfileBuilder {
         self
     }
 }
+
+//-------------------------------------------------------------------------------------------------
 
 impl MessageBuilder<messages::set_charging_profile::SetChargingProfileRequest>
     for SetChargingProfileBuilder

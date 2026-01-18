@@ -125,7 +125,7 @@ mod tests {
                 reason: Some(Reason::Local),
                 transaction_data: None,
             },
-            &mut charge_point_state
+            &mut charge_point_state,
         )?;
 
         assert_eq!(
