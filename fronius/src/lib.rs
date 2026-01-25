@@ -1,16 +1,16 @@
 mod digest_auth;
+mod api_types;
 
 use config::config::Fronius;
 use digest_auth::DigestAuth;
+use api_types::*;
 
 use chrono::{Datelike, Weekday, offset::Local};
 use reqwest::{
     StatusCode,
     blocking::{Client, Response},
 };
-use serde::{Deserialize, Serialize};
 
-use std::collections::HashMap;
 use std::time::Duration;
 
 //-------------------------------------------------------------------------------------------------
@@ -24,184 +24,7 @@ static SUPPORTED_CONFIG_API_VERSION: &str = "10.2.0";
 
 static TIMES_OF_USE_WRITE_SUCCESS: &str = "timeofuse";
 
-//-------------------------------------------------------------------------------------------------
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct ResultData {
-    pub roles: Vec<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct LoginResponse {
-    #[serde(alias = "resultData")]
-    pub result_data: ResultData,
-    pub success: bool,
-}
-
-//-------------------------------------------------------------------------------------------------
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct ApiVersions {
-    #[serde(alias = "ComponentsApi")]
-    components_api: String,
-    #[serde(alias = "commandsApi")]
-    commands_api: String,
-    #[serde(alias = "configApi")]
-    config_api: String,
-    #[serde(alias = "setupAppApi")]
-    setup_app_api: String,
-    #[serde(alias = "setupAppUpdateApi")]
-    setup_app_update_api: String,
-    #[serde(alias = "statusApi")]
-    status_api: String,
-    #[serde(alias = "updateApi")]
-    update_api: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct AppVersions {
-    #[serde(alias = "minAndroidVersion")]
-    min_android_version: usize,
-    #[serde(alias = "minIOSVersion")]
-    min_ios_version: usize,
-    #[serde(alias = "minWinVersion")]
-    min_win_version: usize,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct ApiVersionResponse {
-    #[serde(alias = "apiversions")]
-    api_versions: ApiVersions,
-    #[serde(alias = "articleNumber")]
-    article_number: String,
-    #[serde(alias = "commonName")]
-    common_name: String,
-    #[serde(alias = "devicegroup")]
-    device_group: String,
-    #[serde(alias = "devicename")]
-    device_name: String,
-    #[serde(alias = "hardwareId")]
-    hardware_id: String,
-    #[serde(alias = "hwrevisions")]
-    hardware_revisions: HashMap<String, String>,
-    #[serde(alias = "minAppVersions")]
-    min_app_versions: AppVersions,
-    #[serde(alias = "numberOfPhases")]
-    number_of_phases: usize,
-    #[serde(alias = "serialNumber")]
-    serial_number: String,
-    #[serde(alias = "softwareVersionPrefix")]
-    software_version_prefix: String,
-    #[serde(alias = "swrevisions")]
-    software_revisions: HashMap<String, String>,
-}
-
-/*
- * {
- *   "timeofuse": [
- *     {
- *       "Active": true,
- *       "Power": 0,
- *       "ScheduleType": "DISCHARGE_MAX",
- *       "TimeTable": {
- *         "Start": "20:00",
- *         "End": "23:00"
- *       },
- *       "Weekdays": {
- *         "Mon": false,
- *         "Tue": false,
- *         "Wed": false,
- *         "Thu": false,
- *         "Fri": true,
- *         "Sat": false,
- *         "Sun": false
- *       }
- *     }
- *   ]
- * }
- */
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct TimeTable {
-    #[serde(rename = "Start")]
-    start: String,
-    #[serde(rename = "End")]
-    end: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
-struct Weekdays {
-    #[serde(rename = "Mon")]
-    monday: bool,
-    #[serde(rename = "Tue")]
-    tuesday: bool,
-    #[serde(rename = "Wed")]
-    wednesday: bool,
-    #[serde(rename = "Thu")]
-    thursday: bool,
-    #[serde(rename = "Fri")]
-    friday: bool,
-    #[serde(rename = "Sat")]
-    saturday: bool,
-    #[serde(rename = "Sun")]
-    sunday: bool,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
-enum ScheduleType {
-    #[serde(rename = "DISCHARGE_MAX")]
-    DischargeMax,
-    #[serde(rename = "DISCHARGE_MIN")]
-    DischargeMin,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct TimeOfUse {
-    #[serde(rename = "Active")]
-    active: bool,
-    #[serde(rename = "Power")]
-    power: usize,
-    #[serde(rename = "ScheduleType")]
-    schedule_type: ScheduleType,
-    #[serde(rename = "TimeTable")]
-    time_table: TimeTable,
-    #[serde(rename = "Weekdays")]
-    weekdays: Weekdays,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct TimesOfUse {
-    #[serde(rename = "timeofuse")]
-    time_of_use: Vec<TimeOfUse>,
-}
-
-/*
- * {
- *	 "errors" : [],
- *	 "permissionFailure" : [],
- *	 "unknownNodes" : [],
- *	 "validationErrors" : [],
- *	 "writeFailure" : [],
- *	 "writeSuccess" :
- *	 [
- *	 	"timeofuse"
- *	 ]
- * }
- */
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct TimesOfUseResponse {
-    errors: Vec<String>,
-    #[serde(rename = "permissionFailure")]
-    permission_failure: Vec<String>,
-    #[serde(rename = "unknownNodes")]
-    unknown_nodes: Vec<String>,
-    #[serde(rename = "validationErrors")]
-    validation_errors: Vec<String>,
-    #[serde(rename = "writeFailure")]
-    write_failure: Vec<String>,
-    #[serde(rename = "writeSuccess")]
-    write_success: Vec<String>,
-}
+static TIME_TABLE_FORMAT: &str = "%H:%M";
 
 //-------------------------------------------------------------------------------------------------
 
@@ -214,9 +37,14 @@ pub struct FroniusApi {
 
 impl FroniusApi {
     pub fn new(fronius_config: &Fronius) -> Self {
-        Self {
+        let self_ = Self {
             digest_auth: DigestAuth::new(&fronius_config.username, &fronius_config.password),
             fronius_config: fronius_config.clone(),
+        };
+
+        match self_.check_firmware_version() {
+            Ok(_) => self_,
+            Err(e) => panic!("{}", e),
         }
     }
 
@@ -276,13 +104,11 @@ impl FroniusApi {
         // Early login because if login does not work nothing else SHALL happen!
         self.login()?;
 
-        let time_table_format = "%H:%M";
-
         let start = Local::now();
         let end = start + *duration_to_block;
 
-        let formatted_start = start.format(time_table_format);
-        let formatted_end = end.format(time_table_format);
+        let formatted_start = start.format(TIME_TABLE_FORMAT);
+        let formatted_end = end.format(TIME_TABLE_FORMAT);
 
         let weekdays = Weekdays {
             monday: start.weekday() == Weekday::Mon || end.weekday() == Weekday::Mon,
