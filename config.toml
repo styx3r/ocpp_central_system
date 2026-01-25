@@ -1,5 +1,10 @@
 log_directory = "."
 
+[fronius]
+username = "USERNAME"
+password = "PASSWORD"
+url = "URL"
+
 [[id_tags]]
 id = ""
 
