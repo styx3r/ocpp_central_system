@@ -48,6 +48,8 @@ use log::info;
 use rusqlite::Connection;
 use tungstenite::Utf8Bytes;
 
+use std::sync::{Arc, Mutex};
+
 //-------------------------------------------------------------------------------------------------
 
 pub struct OCPPCentralSystem<'a, T: OcppStatusNotificationHook> {
@@ -58,7 +60,7 @@ pub struct OCPPCentralSystem<'a, T: OcppStatusNotificationHook> {
 
     charging_point_count: u32,
 
-    status_notification_hook: &'a mut T,
+    status_notification_hook: Arc<Mutex<T>>,
 }
 
 impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
@@ -67,7 +69,7 @@ impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
         charging_point_ip: String,
         config: Config,
         charge_point_state: &'a mut ChargePointState,
-        status_notification_hook: &'a mut T,
+        status_notification_hook: Arc<Mutex<T>>,
     ) -> Self {
         let mut instance = Self {
             db_connection,
@@ -80,7 +82,7 @@ impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
 
         instance
             .setup_persistence()
-            .expect("Could not create persistance DB!");
+            .expect("Could not create persistence DB!");
 
         instance
             .setup_initial_configuration()
@@ -326,7 +328,7 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
                 >(request.json)?;
                 serde_json::to_value(&handle_status_notification_request(
                     &status_notification,
-                    self.status_notification_hook,
+                    Arc::clone(&self.status_notification_hook),
                 )?)?
             }
             MessageTypeName::StopTransaction => {

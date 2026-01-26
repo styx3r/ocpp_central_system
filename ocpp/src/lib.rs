@@ -15,6 +15,8 @@ use ocpp_types::MessageTypeName;
 
 use ocpp_central_system::OCPPCentralSystem;
 
+use std::sync::{Arc, Mutex};
+
 //-------------------------------------------------------------------------------------------------
 
 pub use rust_ocpp::v1_6::messages::status_notification::StatusNotificationRequest;
@@ -90,7 +92,7 @@ where
 
 pub fn run<T: OcppStatusNotificationHook>(
     config: &Config,
-    ocpp_status_notification_hook: &mut T,
+    ocpp_status_notification_hook: Arc<Mutex<T>>,
 ) -> Result<(), Box<dyn Error>> {
     std::fs::create_dir_all(&config.log_directory)?;
 

@@ -126,11 +126,7 @@ impl DigestAuth {
         Ok(())
     }
 
-    fn calculate_authentication_header(
-        &mut self,
-        uri: &String,
-        http_method: &str,
-    ) -> Result<HeaderValue, Box<dyn Error>> {
+    fn calculate_cnonce(&mut self) {
         let offset = Duration::from_secs(self.nc as u64);
         self.cnonce = Some(
             format!("{:x}", md5::compute((Utc::now() + offset).to_rfc2822()))
@@ -138,7 +134,13 @@ impl DigestAuth {
                 .take(16)
                 .collect::<String>(),
         );
+    }
 
+    fn calculate_authentication_header(
+        &mut self,
+        uri: &String,
+        http_method: &str,
+    ) -> Result<HeaderValue, Box<dyn Error>> {
         if let Some(algorithm) = &self.algorithm
             && let Some(nonce) = &self.nonce
             && let Some(realm) = &self.realm
@@ -190,6 +192,7 @@ impl DigestAuth {
         let response: Response = Client::new().get(&request_url).send()?;
 
         self.populate_digest_auth_fields(&response)?;
+        self.calculate_cnonce();
 
         let response: Response = Client::new()
             .get(&request_url)
@@ -222,6 +225,9 @@ impl DigestAuth {
             request_url,
             serde_json::to_string(request_params)?
         );
+
+        self.calculate_cnonce();
+
         let response: Response = Client::new()
             .post(&request_url)
             .json(request_params)
@@ -236,5 +242,31 @@ impl DigestAuth {
         }
 
         Ok(response.text()?)
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn populate_digest_auth_fields() -> Result<(), Box<dyn std::error::Error>> {
+
+        let mut digest_auth = DigestAuth::new(&"USERNAME".into(), &"PASSWORD".into());
+        digest_auth.algorithm = Some("SHA256".into());
+        digest_auth.qop = Some("auth".into());
+        digest_auth.realm = Some("Webinterface area".into());
+        digest_auth.nonce = Some("30f60573697669f3".into());
+        digest_auth.cnonce = Some("9640033de7455ee6".into());
+
+        digest_auth.calculate_authentication_header(&"/api/commands/Login".into(), "GET")?;
+
+        assert_eq!(digest_auth.nc, 2);
+        assert!(digest_auth.cnonce.is_some());
+        assert_eq!(digest_auth.response, Some("a6d5b312a6c94010381723eaca2bfe982ab4f0f4109854c3ceaeb42cbd366720".into()));
+
+        Ok(())
     }
 }

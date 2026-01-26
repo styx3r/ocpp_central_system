@@ -34,7 +34,7 @@ impl IntegrationTest {
         let config_clone = self.config.clone();
 
         self.join_handles.push(spawn(move || {
-            ocpp::run::<Hook>(&config_clone, &mut thread_safe_hook.lock().unwrap())
+            ocpp::run::<Hook>(&config_clone, thread_safe_hook)
                 .expect("OCPP central system could not be started!")
         }));
 

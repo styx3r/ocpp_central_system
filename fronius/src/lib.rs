@@ -6,6 +6,7 @@ use digest_auth::DigestAuth;
 use api_types::*;
 
 use chrono::{Datelike, Weekday, offset::Local};
+use log::info;
 use reqwest::{
     StatusCode,
     blocking::{Client, Response},
@@ -177,6 +178,7 @@ impl FroniusApi {
             return Err("Could not block Battery!".into());
         }
 
+        info!("Blocked battery!");
         Ok(())
     }
 

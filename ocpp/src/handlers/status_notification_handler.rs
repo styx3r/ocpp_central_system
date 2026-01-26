@@ -3,18 +3,20 @@ use rust_ocpp::v1_6::{messages::status_notification, types::ChargePointStatus};
 use crate::{OcppStatusNotificationHook, ocpp_types::CustomError};
 use log::{info, error};
 
+use std::sync::{Arc, Mutex};
+
 //------------------------------------------------------------------------------------------------
 
 pub(crate) fn handle_status_notification_request<T: OcppStatusNotificationHook>(
     status_notification: &status_notification::StatusNotificationRequest,
-    hook: &mut T
+    hook: Arc<Mutex<T>>
 ) -> Result<status_notification::StatusNotificationResponse, CustomError> {
     info!(
         "Received StatusNotificationRequest with context: {:?}",
         status_notification
     );
 
-    match hook.evaluate(status_notification) {
+    match hook.lock().unwrap().evaluate(status_notification) {
         Err(_) => error!("Hook failed!"),
         _ => {}
     }
@@ -53,7 +55,7 @@ mod tests {
 
     #[test]
     fn status_notification() -> Result<(), CustomError> {
-        let mut hook = Hook::default();
+        let hook = Arc::new(Mutex::new(Hook::default()));
         let response =
             handle_status_notification_request(&status_notification::StatusNotificationRequest {
                 connector_id: UNITTEST_CONNECTOR_ID,
@@ -64,9 +66,9 @@ mod tests {
                 vendor_id: None,
                 vendor_error_code: None,
             },
-            &mut hook)?;
+            Arc::clone(&hook))?;
 
-        assert!(hook.called);
+        assert!(hook.lock().unwrap().called);
         assert_eq!(response, status_notification::StatusNotificationResponse {});
 
         Ok(())

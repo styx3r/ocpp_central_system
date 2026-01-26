@@ -1,17 +1,21 @@
 use std::fs;
 use std::path::Path;
-use std::{error::Error, time::Duration};
+use std::{error::Error, time::Duration, sync::{Arc, Mutex}};
 
 use config::config::Config;
 
 use ftail::Ftail;
-use log::LevelFilter;
+use log::{LevelFilter, info};
 
 use clap::Parser;
 
 use fronius::FroniusApi;
 
 use ocpp::{ChargePointStatus, StatusNotificationRequest};
+
+//-------------------------------------------------------------------------------------------------
+
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 //-------------------------------------------------------------------------------------------------
 
@@ -84,8 +88,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .daily_file(Path::new(&config.log_directory), LevelFilter::Info) // log errors to daily files
         .init()?; // initialize logger
 
-    let mut hooks = OcppHooks::new(FroniusApi::new(&config.fronius));
-    ocpp::run(&config, &mut hooks)?;
+    info!("Starting OCPPCentralSystem v{}", VERSION);
+
+    let hooks = Arc::new(Mutex::new(OcppHooks::new(FroniusApi::new(&config.fronius))));
+    ocpp::run::<OcppHooks>(&config, Arc::clone(&hooks))?;
 
     Ok(())
 }
@@ -105,6 +111,7 @@ impl ocpp::OcppStatusNotificationHook for OcppHooks {
         &mut self,
         status_notification: &StatusNotificationRequest,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Evaluating OcppStatusNotificationHook {:?}", status_notification.status);
         match status_notification.status {
             ChargePointStatus::Charging => {
                 self.0
