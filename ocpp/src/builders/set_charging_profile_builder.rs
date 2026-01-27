@@ -11,7 +11,7 @@ use rust_ocpp::v1_6::types::{
 
 //-------------------------------------------------------------------------------------------------
 
-pub(crate) struct SetChargingProfileBuilder {
+pub struct SetChargingProfileBuilder {
     connector_id: i32,
     charging_profile: ChargingProfile,
 
@@ -20,7 +20,7 @@ pub(crate) struct SetChargingProfileBuilder {
 }
 
 impl SetChargingProfileBuilder {
-    pub(crate) fn new(
+    pub fn new(
         connector_id: i32,
         charging_profile_id: i32,
         charging_profile_purpose: ChargingProfilePurposeType,
@@ -51,7 +51,7 @@ impl SetChargingProfileBuilder {
         }
     }
 
-    pub(crate) fn add_charging_schedule_period(
+    pub fn add_charging_schedule_period(
         &mut self,
         start_period: i32,
         limit: &Decimal,

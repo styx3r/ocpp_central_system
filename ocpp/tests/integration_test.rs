@@ -6,7 +6,9 @@ use std::sync::{Arc, Mutex};
 
 use config::config;
 
-use ocpp::{OcppStatusNotificationHook, StatusNotificationRequest};
+use ocpp::{
+    ChargePointState, OcppMeterValuesHook, OcppStatusNotificationHook, StatusNotificationRequest,
+};
 
 use serde::Deserialize;
 use serde_json::json;
@@ -15,7 +17,7 @@ use tungstenite::{WebSocket, stream::MaybeTlsStream};
 //-------------------------------------------------------------------------------------------------
 
 #[derive(Deserialize)]
-struct ExpectedJSONFromat {
+struct ExpectedJSONFormat {
     message_id: u32,
     uuid: String,
     message_type: String,
@@ -42,13 +44,22 @@ impl OcppStatusNotificationHook for Hook {
     }
 }
 
+impl OcppMeterValuesHook for Hook {
+    fn evaluate(
+        &mut self,
+        _charge_point_state: &mut ChargePointState,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        unimplemented!("This hook needs to be implemented!");
+    }
+}
+
 //-------------------------------------------------------------------------------------------------
 
 fn validate_message(
     websocket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
-    expected_message: &ExpectedJSONFromat,
+    expected_message: &ExpectedJSONFormat,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    match serde_json::from_str::<ExpectedJSONFromat>(websocket.read()?.to_text()?) {
+    match serde_json::from_str::<ExpectedJSONFormat>(websocket.read()?.to_text()?) {
         Ok(request) => {
             assert_eq!(request.message_id, expected_message.message_id);
             assert_eq!(request.message_type, expected_message.message_type);
@@ -70,19 +81,19 @@ fn validate_initial_messages(
     websocket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for expected_message in vec![
-        ExpectedJSONFromat {
+        ExpectedJSONFormat {
             message_id: 2,
             uuid: "".to_owned(),
             message_type: "TriggerMessage".to_owned(),
             json: json!({"requestedMessage": "BootNotification"}),
         },
-        ExpectedJSONFromat {
+        ExpectedJSONFormat {
             message_id: 2,
             uuid: "".to_owned(),
             message_type: "ClearChargingProfile".to_owned(),
             json: json!({}),
         },
-        ExpectedJSONFromat {
+        ExpectedJSONFormat {
             message_id: 2,
             uuid: "".to_owned(),
             message_type: "TriggerMessage".to_owned(),
@@ -128,8 +139,8 @@ fn boot_notification() -> Result<(), Box<dyn Error>> {
         },
     };
 
-    let hook = Hook::default();
-    let mut integration_test = common::IntegrationTest::new(config, Arc::new(Mutex::new(hook)));
+    let hook = Arc::new(Mutex::new(Hook::default()));
+    let mut integration_test = common::IntegrationTest::new(config, Arc::clone(&hook));
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;

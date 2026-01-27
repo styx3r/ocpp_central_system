@@ -1,9 +1,8 @@
-use config::config;
-use crate::builders::{
-    MessageBuilder, set_charging_profile_builder::SetChargingProfileBuilder,
-};
+use crate::builders::{MessageBuilder, set_charging_profile_builder::SetChargingProfileBuilder};
 use crate::ocpp_types::{CustomError, MessageTypeName};
-use crate::{ChargePointState, RequestToSend};
+use crate::{ChargePointState, OcppMeterValuesHook, RequestToSend};
+use config::config;
+use std::sync::{Arc, Mutex};
 
 use rust_ocpp::v1_6::messages::meter_values;
 use rust_ocpp::v1_6::types::{
@@ -13,14 +12,14 @@ use rust_ocpp::v1_6::types::{
 
 use rust_decimal::Decimal;
 
-use log::info;
+use log::{error, info};
 
 //-------------------------------------------------------------------------------------------------
 
-pub(crate) fn handle_meter_values_request(
+pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
     meter_values_request: &meter_values::MeterValuesRequest,
-    charge_point_config: &config::ChargePoint,
     charge_point_state: &mut ChargePointState,
+    hook: Arc<Mutex<T>>,
 ) -> Result<meter_values::MeterValuesResponse, CustomError> {
     info!(
         "Received {} with content: {:?}",
@@ -33,16 +32,18 @@ pub(crate) fn handle_meter_values_request(
         for sampled_value in &meter_value.sampled_value {
             match sampled_value.measurand {
                 Some(rust_ocpp::v1_6::types::Measurand::CurrentOffered) => {
-                    charge_point_state.latest_current = sampled_value.value.parse::<f64>().ok();
+                    charge_point_state.latest_current =
+                        sampled_value.value.parse::<f64>().ok();
                 }
                 Some(rust_ocpp::v1_6::types::Measurand::PowerOffered) => {
-                    charge_point_state.latest_power = match sampled_value.value.parse::<f64>() {
-                        Ok(v) => match sampled_value.unit {
-                            Some(UnitOfMeasure::Kw) => Some(v * 1000.0),
-                            _ => Some(v),
-                        },
-                        _ => None,
-                    }
+                    charge_point_state.latest_power =
+                        match sampled_value.value.parse::<f64>() {
+                            Ok(v) => match sampled_value.unit {
+                                Some(UnitOfMeasure::Kw) => Some(v * 1000.0),
+                                _ => Some(v),
+                            },
+                            _ => None,
+                        }
                 }
                 Some(rust_ocpp::v1_6::types::Measurand::Voltage) => {
                     match (system_voltage, sampled_value.value.parse::<f64>()) {
@@ -62,98 +63,16 @@ pub(crate) fn handle_meter_values_request(
 
     charge_point_state.latest_voltage = system_voltage;
 
-    if let Some(latest_current) = charge_point_state.latest_current
-        && let Some(latest_power) = charge_point_state.latest_power
-        && let Some(latest_voltage) = charge_point_state.latest_voltage
+    match hook
+        .lock()
+        .unwrap()
+        .evaluate(charge_point_state)
     {
-        charge_point_state.latest_cos_phi = Some(latest_power / (latest_voltage * latest_current));
-
-        info!(
-            "Calculated cos(phi): {} / ({} * {}) = {}",
-            latest_power,
-            latest_voltage,
-            latest_current,
-            charge_point_state.latest_cos_phi.unwrap_or(1.0)
-        );
-
-        let _ = calculate_max_charging_current(charge_point_config, charge_point_state);
-        // TODO(styx3r): If transaction is running and SmartCharging is enabled set TxProfile
-        // accordingly.
+        Err(err) => error!("Hook failed: {}", err),
+        _ => {}
     }
 
     Ok(meter_values::MeterValuesResponse {})
-}
-
-//-------------------------------------------------------------------------------------------------
-
-fn calculate_max_charging_current(
-    charge_point_config: &config::ChargePoint,
-    charging_point_state: &mut ChargePointState,
-) -> Result<(), CustomError> {
-    let max_charging_power: f64 = charge_point_config.max_charging_power.into();
-
-    let max_charging_current = (max_charging_power
-        / (charging_point_state
-            .latest_voltage
-            .unwrap_or(charge_point_config.default_system_voltage)
-            * charging_point_state
-                .latest_cos_phi
-                .unwrap_or(charge_point_config.default_cos_phi)))
-    .clamp(
-        charge_point_config.minimum_charging_current,
-        charge_point_config.default_current,
-    )
-    .floor();
-
-    // If the current calculated max charging current does not differ more than 1.0 A compared
-    // to the cached max charging current nothing will be changed.
-    if let Some(cached_max_charging_current) = charging_point_state.max_current
-        && cached_max_charging_current - max_charging_current < 1.0
-    {
-        info!("Max. charging current won't be changed because difference is < 1.0 A");
-        return Ok(());
-    }
-
-    charging_point_state.max_current = Some(max_charging_current);
-
-    info!(
-        "Setting max. charging current to {} A",
-        max_charging_current
-    );
-
-    let limit = Decimal::from_f64_retain(max_charging_current)
-        .ok_or(CustomError::Common(
-            "Could not convert to Decimal!".to_owned(),
-        ))?
-        .round_dp(1);
-
-    const CONNECTOR_ID: i32 = 0;
-    const CHARGING_PROFILE_ID: i32 = 1;
-    const CHARGING_SCHEDULE_START_PERIOD: i32 = 0;
-    const CHARGING_SCHEDULE_PERIOD_NUMBER_PHASES: Option<i32> = None;
-
-    let (uuid, set_charging_profile_request) = SetChargingProfileBuilder::new(
-        CONNECTOR_ID,
-        CHARGING_PROFILE_ID,
-        ChargingProfilePurposeType::ChargePointMaxProfile,
-        ChargingProfileKindType::Relative,
-        ChargingRateUnitType::A,
-    )
-    .add_charging_schedule_period(
-        CHARGING_SCHEDULE_START_PERIOD,
-        &limit,
-        CHARGING_SCHEDULE_PERIOD_NUMBER_PHASES,
-    )
-    .build()
-    .serialize()?;
-
-    charging_point_state.requests_to_send.push(RequestToSend {
-        uuid: uuid.clone(),
-        message_type: MessageTypeName::SetChargingProfile,
-        payload: set_charging_profile_request,
-    });
-
-    Ok(())
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -176,26 +95,38 @@ mod tests {
     static UNITTEST_COS_PHI: f64 = 0.86;
     static UNITTEST_MINIMUM_CHARGING_CURRENT: f64 = 6.0;
 
+    struct Hook {
+        pub called: bool,
+    }
+
+    impl Hook {
+        pub fn default() -> Self {
+            Self { called: false }
+        }
+    }
+
+    impl OcppMeterValuesHook for Hook {
+        fn evaluate(
+            &mut self,
+            _meter_values: &mut ChargePointState,
+        ) -> Result<(), Box<dyn std::error::Error>> {
+            self.called = true;
+            Ok(())
+        }
+    }
+
     #[test]
     fn meter_values_request_empty() -> Result<(), CustomError> {
         let mut charge_point_state = ChargePointState::default();
+        let hook = Arc::new(Mutex::new(Hook::default()));
         let response = handle_meter_values_request(
             &meter_values::MeterValuesRequest {
                 connector_id: UNITTEST_CONNECTOR_ID,
                 transaction_id: None,
                 meter_value: vec![],
             },
-            &config::ChargePoint {
-                serial_number: UNITTEST_CHARGING_POINT_SERIAL.to_owned(),
-                heartbeat_interval: UNITTEST_HEARTBEAT_INTERVAL,
-                max_charging_power: UNITTEST_MAX_CHARGING_POWER,
-                default_system_voltage: UNITTEST_SYSTEM_VOLTAGE,
-                default_current: UNITTEST_DEFAULT_CURRENT,
-                default_cos_phi: UNITTEST_COS_PHI,
-                minimum_charging_current: UNITTEST_MINIMUM_CHARGING_CURRENT,
-                config_parameters: vec![],
-            },
             &mut charge_point_state,
+            Arc::clone(&hook)
         )?;
 
         assert_eq!(response, meter_values::MeterValuesResponse {});
@@ -258,6 +189,8 @@ mod tests {
     #[test]
     fn meter_values_request() -> Result<(), CustomError> {
         let mut charge_point_state = ChargePointState::default();
+        let hook = Arc::new(Mutex::new(Hook::default()));
+
         let response = handle_meter_values_request(
             &meter_values::MeterValuesRequest {
                 connector_id: UNITTEST_CONNECTOR_ID,
@@ -313,17 +246,8 @@ mod tests {
                     ],
                 }],
             },
-            &config::ChargePoint {
-                serial_number: UNITTEST_CHARGING_POINT_SERIAL.to_owned(),
-                heartbeat_interval: UNITTEST_HEARTBEAT_INTERVAL,
-                max_charging_power: UNITTEST_MAX_CHARGING_POWER,
-                default_system_voltage: UNITTEST_SYSTEM_VOLTAGE,
-                default_current: UNITTEST_DEFAULT_CURRENT,
-                default_cos_phi: UNITTEST_COS_PHI,
-                minimum_charging_current: UNITTEST_MINIMUM_CHARGING_CURRENT,
-                config_parameters: vec![],
-            },
             &mut charge_point_state,
+            Arc::clone(&hook)
         )?;
 
         assert_eq!(response, meter_values::MeterValuesResponse {});
@@ -331,9 +255,9 @@ mod tests {
         assert_eq!(charge_point_state.latest_current, Some(9.0));
         assert_eq!(charge_point_state.latest_voltage, Some(695.9));
         assert_eq!(charge_point_state.latest_power, Some(6255.9));
-        assert_eq!(charge_point_state.latest_cos_phi, Some(0.9988504095416009));
 
-        assert_eq!(charge_point_state.max_current, Some(15.0));
+        assert_eq!(charge_point_state.latest_cos_phi, None);
+        assert_eq!(charge_point_state.max_current, None);
 
         Ok(())
     }

@@ -17,7 +17,7 @@ pub(crate) fn handle_status_notification_request<T: OcppStatusNotificationHook>(
     );
 
     match hook.lock().unwrap().evaluate(status_notification) {
-        Err(_) => error!("Hook failed!"),
+        Err(err) => error!("Hook failed: {}", err),
         _ => {}
     }
 

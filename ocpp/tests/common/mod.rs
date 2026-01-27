@@ -6,8 +6,6 @@ use std::{
 };
 use tungstenite::{WebSocket, connect, stream::MaybeTlsStream};
 
-use std::path::Path;
-
 use crate::Hook;
 
 //-------------------------------------------------------------------------------------------------

@@ -11,7 +11,7 @@ use std::{error::Error, net::TcpListener};
 use tungstenite::{Utf8Bytes, accept};
 
 use config::config::Config;
-use ocpp_types::MessageTypeName;
+pub use ocpp_types::MessageTypeName;
 
 use ocpp_central_system::OCPPCentralSystem;
 
@@ -31,30 +31,47 @@ pub trait OcppStatusNotificationHook {
 
 //-------------------------------------------------------------------------------------------------
 
+pub use crate::ocpp_types::CustomError;
+pub use builders::MessageBuilder;
+pub use builders::set_charging_profile_builder::SetChargingProfileBuilder;
+pub use rust_decimal::Decimal;
+pub use rust_ocpp::v1_6::types::{
+    ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType,
+};
+
+pub trait OcppMeterValuesHook {
+    fn evaluate(
+        &mut self,
+        charge_point_state: &mut ChargePointState,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+//-------------------------------------------------------------------------------------------------
+
 #[derive(Debug, PartialEq)]
-struct Transaction {
-    id_tag: Option<String>,
-    transaction_id: i32,
+pub struct Transaction {
+    pub id_tag: Option<String>,
+    pub transaction_id: i32,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct RequestToSend {
-    uuid: String,
-    message_type: MessageTypeName,
+    pub uuid: String,
+    pub message_type: MessageTypeName,
     pub payload: String,
 }
 
 #[derive(Default)]
-struct ChargePointState {
-    latest_cos_phi: Option<f64>,
-    latest_power: Option<f64>,
-    latest_current: Option<f64>,
-    latest_voltage: Option<f64>,
-    max_current: Option<f64>,
+pub struct ChargePointState {
+    pub latest_cos_phi: Option<f64>,
+    pub latest_power: Option<f64>,
+    pub latest_current: Option<f64>,
+    pub latest_voltage: Option<f64>,
+    pub max_current: Option<f64>,
 
-    requests_to_send: Vec<RequestToSend>,
-    requests_awaiting_confirmation: Vec<RequestToSend>,
-    running_transactions: Vec<Transaction>,
+    pub requests_to_send: Vec<RequestToSend>,
+    pub requests_awaiting_confirmation: Vec<RequestToSend>,
+    pub running_transactions: Vec<Transaction>,
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -64,7 +81,7 @@ fn dispatch_message<T>(
     text: &Utf8Bytes,
 ) -> Vec<String>
 where
-    T: OcppStatusNotificationHook,
+    T: OcppStatusNotificationHook + OcppMeterValuesHook,
 {
     let mut response_messages: Vec<String> = vec![];
     match ocpp_central_system.process_text_message(&text) {
@@ -90,9 +107,9 @@ where
 
 //-------------------------------------------------------------------------------------------------
 
-pub fn run<T: OcppStatusNotificationHook>(
+pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook>(
     config: &Config,
-    ocpp_status_notification_hook: Arc<Mutex<T>>,
+    ocpp_hooks: Arc<Mutex<T>>,
 ) -> Result<(), Box<dyn Error>> {
     std::fs::create_dir_all(&config.log_directory)?;
 
@@ -131,13 +148,13 @@ pub fn run<T: OcppStatusNotificationHook>(
         let handle = stream?;
         let peer_address = handle.peer_addr()?.ip().to_string();
 
-        let mut charge_point_state = ChargePointState::default();
+        let charge_point_state = Arc::new(Mutex::new(ChargePointState::default()));
         let mut ocpp_central_system = OCPPCentralSystem::new(
             db_connection,
             peer_address,
             config.to_owned(),
-            &mut charge_point_state,
-            ocpp_status_notification_hook,
+            charge_point_state,
+            ocpp_hooks,
         );
 
         let mut websocket = accept(handle)?;

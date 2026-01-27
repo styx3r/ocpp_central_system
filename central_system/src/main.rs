@@ -1,6 +1,9 @@
 use std::fs;
 use std::path::Path;
-use std::{error::Error, time::Duration, sync::{Arc, Mutex}};
+use std::{
+    error::Error,
+    sync::{Arc, Mutex},
+};
 
 use config::config::Config;
 
@@ -9,9 +12,10 @@ use log::{LevelFilter, info};
 
 use clap::Parser;
 
-use fronius::FroniusApi;
+mod hooks;
 
-use ocpp::{ChargePointStatus, StatusNotificationRequest};
+use fronius::FroniusApi;
+use hooks::OcppHooks;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -90,39 +94,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Starting OCPPCentralSystem v{}", VERSION);
 
-    let hooks = Arc::new(Mutex::new(OcppHooks::new(FroniusApi::new(&config.fronius))));
+    let hooks = Arc::new(Mutex::new(OcppHooks::new(
+        FroniusApi::new(&config.fronius),
+        config.charging_point.clone(),
+    )));
     ocpp::run::<OcppHooks>(&config, Arc::clone(&hooks))?;
 
     Ok(())
-}
-
-//-------------------------------------------------------------------------------------------------
-
-struct OcppHooks(FroniusApi);
-
-impl OcppHooks {
-    pub fn new(fronius_api: FroniusApi) -> Self {
-        Self(fronius_api)
-    }
-}
-
-impl ocpp::OcppStatusNotificationHook for OcppHooks {
-    fn evaluate(
-        &mut self,
-        status_notification: &StatusNotificationRequest,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Evaluating OcppStatusNotificationHook {:?}", status_notification.status);
-        match status_notification.status {
-            ChargePointStatus::Charging => {
-                self.0
-                    .block_battery_for_duration(&Duration::from_hours(12))?;
-            },
-            ChargePointStatus::SuspendedEV => {
-                self.0.fully_unblock_battery()?;
-            },
-            _ => {}
-        }
-
-        Ok(())
-    }
 }

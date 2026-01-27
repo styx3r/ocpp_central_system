@@ -1,9 +1,9 @@
-mod digest_auth;
 mod api_types;
+mod digest_auth;
 
+use api_types::*;
 use config::config::Fronius;
 use digest_auth::DigestAuth;
-use api_types::*;
 
 use chrono::{Datelike, Weekday, offset::Local};
 use log::info;
@@ -37,6 +37,17 @@ pub struct FroniusApi {
 //-------------------------------------------------------------------------------------------------
 
 impl FroniusApi {
+    pub fn default() -> Self {
+        Self {
+            digest_auth: DigestAuth::new(&"".to_owned(), &"".to_owned()),
+            fronius_config: Fronius {
+                username: "".to_owned(),
+                password: "".to_owned(),
+                url: "".to_owned(),
+            },
+        }
+    }
+
     pub fn new(fronius_config: &Fronius) -> Self {
         let self_ = Self {
             digest_auth: DigestAuth::new(&fronius_config.username, &fronius_config.password),

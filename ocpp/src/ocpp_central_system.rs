@@ -11,7 +11,7 @@ use rust_ocpp::v1_6::{
 use rust_ocpp::v2_0_1::messages::{log_status_notification, security_event_notification};
 
 use crate::{
-    ChargePointState, OcppStatusNotificationHook, RequestToSend,
+    ChargePointState, OcppMeterValuesHook, OcppStatusNotificationHook, RequestToSend,
     builders::{
         MessageBuilder, change_configuration_builder::ChangeConfigurationBuilder,
         clear_charging_profile_builder::ClearChargingProfileBuilder,
@@ -52,23 +52,23 @@ use std::sync::{Arc, Mutex};
 
 //-------------------------------------------------------------------------------------------------
 
-pub struct OCPPCentralSystem<'a, T: OcppStatusNotificationHook> {
+pub struct OCPPCentralSystem<T: OcppStatusNotificationHook + OcppMeterValuesHook> {
     db_connection: Connection,
     charging_point_ip: String,
     config: Config,
-    charge_point_state: &'a mut ChargePointState,
+    charge_point_state: Arc<Mutex<ChargePointState>>,
 
     charging_point_count: u32,
 
-    status_notification_hook: Arc<Mutex<T>>,
+    ocpp_hooks: Arc<Mutex<T>>,
 }
 
-impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
+impl<T: OcppStatusNotificationHook + OcppMeterValuesHook> OCPPCentralSystem<T> {
     pub fn new(
         db_connection: Connection,
         charging_point_ip: String,
         config: Config,
-        charge_point_state: &'a mut ChargePointState,
+        charge_point_state: Arc<Mutex<ChargePointState>>,
         status_notification_hook: Arc<Mutex<T>>,
     ) -> Self {
         let mut instance = Self {
@@ -77,7 +77,7 @@ impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
             config,
             charge_point_state,
             charging_point_count: 0,
-            status_notification_hook,
+            ocpp_hooks: status_notification_hook,
         };
 
         instance
@@ -127,6 +127,8 @@ impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
         };
 
         self.charge_point_state
+            .lock()
+            .unwrap()
             .requests_awaiting_confirmation
             .push(request_to_send.clone());
 
@@ -138,13 +140,13 @@ impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
             .build()
             .serialize()?;
 
-        self.charge_point_state
-            .requests_to_send
-            .push(RequestToSend {
-                message_type: MessageTypeName::TriggerMessage,
-                uuid,
-                payload,
-            });
+        let mut charge_point_state = self.charge_point_state.lock().unwrap();
+
+        charge_point_state.requests_to_send.push(RequestToSend {
+            message_type: MessageTypeName::TriggerMessage,
+            uuid,
+            payload,
+        });
 
         for config_parameter in &self.config.charging_point.config_parameters {
             let (uuid, change_config_parameter_request) = ChangeConfigurationBuilder::new(
@@ -154,25 +156,21 @@ impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
             .build()
             .serialize()?;
 
-            self.charge_point_state
-                .requests_to_send
-                .push(RequestToSend {
-                    uuid: uuid.clone(),
-                    message_type: MessageTypeName::ChangeConfiguration,
-                    payload: change_config_parameter_request,
-                });
+            charge_point_state.requests_to_send.push(RequestToSend {
+                uuid: uuid.clone(),
+                message_type: MessageTypeName::ChangeConfiguration,
+                payload: change_config_parameter_request,
+            });
         }
 
         let (uuid, clear_charging_profile_request) =
             ClearChargingProfileBuilder::default().build().serialize()?;
 
-        self.charge_point_state
-            .requests_to_send
-            .push(RequestToSend {
-                uuid: uuid.clone(),
-                message_type: MessageTypeName::ClearChargingProfile,
-                payload: clear_charging_profile_request,
-            });
+        charge_point_state.requests_to_send.push(RequestToSend {
+            uuid: uuid.clone(),
+            message_type: MessageTypeName::ClearChargingProfile,
+            payload: clear_charging_profile_request,
+        });
 
         Ok(())
     }
@@ -212,9 +210,10 @@ impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
             return None;
         }
 
-        match self.charge_point_state.requests_to_send.pop() {
+        let mut charge_point_state = self.charge_point_state.lock().unwrap();
+        match charge_point_state.requests_to_send.pop() {
             Some(request_to_send) => {
-                self.charge_point_state
+                charge_point_state
                     .requests_awaiting_confirmation
                     .push(request_to_send.clone());
                 Some(request_to_send)
@@ -226,6 +225,8 @@ impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
     fn waiting_for_response(&self) -> bool {
         !self
             .charge_point_state
+            .lock()
+            .unwrap()
             .requests_awaiting_confirmation
             .is_empty()
     }
@@ -233,11 +234,16 @@ impl<'a, T: OcppStatusNotificationHook> OCPPCentralSystem<'a, T> {
 
 //-------------------------------------------------------------------------------------------------
 
-impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCPPCentralSystem<'_, T> {
+impl<T: OcppStatusNotificationHook + OcppMeterValuesHook> Visitor<Result<String, CustomError>>
+    for OCPPCentralSystem<T>
+{
     fn visit_request_message(
         &mut self,
         request: OcppRequestMessage,
     ) -> Result<String, CustomError> {
+        let charge_point_handle = self.charge_point_state.clone();
+        let mut charge_point_state = charge_point_handle.lock().unwrap();
+
         let response = match request.message_type {
             MessageTypeName::Authorize => {
                 let authorize_request =
@@ -307,8 +313,8 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
 
                 serde_json::to_value(&handle_meter_values_request(
                     &meter_values_request,
-                    &self.config.charging_point,
-                    &mut self.charge_point_state,
+                    &mut charge_point_state,
+                    Arc::clone(&self.ocpp_hooks),
                 )?)?
             }
             MessageTypeName::StartTransaction => {
@@ -319,7 +325,7 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
                 serde_json::to_value(&handle_start_transaction_request(
                     &start_transaction_request,
                     &self.config.id_tags,
-                    &mut self.charge_point_state,
+                    &mut charge_point_state,
                 )?)?
             }
             MessageTypeName::StatusNotification => {
@@ -328,7 +334,7 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
                 >(request.json)?;
                 serde_json::to_value(&handle_status_notification_request(
                     &status_notification,
-                    Arc::clone(&self.status_notification_hook),
+                    Arc::clone(&self.ocpp_hooks),
                 )?)?
             }
             MessageTypeName::StopTransaction => {
@@ -337,7 +343,7 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
                 >(request.json)?;
                 serde_json::to_value(&handle_stop_transaction_request(
                     &stop_transaction_request,
-                    &mut self.charge_point_state,
+                    Arc::clone(&self.charge_point_state),
                 )?)?
             }
             MessageTypeName::LogStatusNotification => {
@@ -409,15 +415,18 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
         &mut self,
         response: OcppResponseMessage,
     ) -> Result<String, CustomError> {
-        let element = self
-            .charge_point_state
+        let handle = self.charge_point_state.clone();
+        let mut charge_point_state = handle.lock().unwrap();
+
+        let element = charge_point_state
             .requests_awaiting_confirmation
             .iter()
             .find(|e| e.uuid == response.uuid)
             .ok_or(CustomError::Common(format!(
                 "Could not find request with uuid {}",
                 response.uuid
-            )))?;
+            )))?
+            .clone();
 
         info!(
             "Received response message of type {} with uuid {}",
@@ -432,7 +441,7 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
                 handle_trigger_message_response(
                     &response.uuid,
                     &trigger_message_response,
-                    &mut self.charge_point_state,
+                    &mut charge_point_state,
                 );
             }
             MessageTypeName::SetChargingProfile => {
@@ -442,7 +451,7 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
                 handle_set_charging_profile_response(
                     &response.uuid,
                     &set_charging_profile_response,
-                    &mut self.charge_point_state,
+                    &mut charge_point_state,
                 );
             }
             MessageTypeName::ClearChargingProfile => {
@@ -452,7 +461,7 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
                 handle_clear_charging_profile_response(
                     &response.uuid,
                     &clear_charging_profile_response,
-                    &mut self.charge_point_state,
+                    &mut charge_point_state,
                 );
             }
             MessageTypeName::ChangeConfiguration => {
@@ -463,7 +472,7 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
                 handle_change_configuration_response(
                     &response.uuid,
                     &change_configuration_response,
-                    &mut self.charge_point_state,
+                    &mut charge_point_state,
                 );
             }
             MessageTypeName::RemoteStartTransaction => {
@@ -474,7 +483,7 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
                 handle_remote_start_transaction_response(
                     &response.uuid,
                     &remote_start_transaction_response,
-                    &mut self.charge_point_state,
+                    &mut charge_point_state,
                 );
             }
             MessageTypeName::GetDiagnostics => {
@@ -485,11 +494,13 @@ impl<T: OcppStatusNotificationHook> Visitor<Result<String, CustomError>> for OCP
                 handle_get_diagnostics_response(
                     &response.uuid,
                     &get_diagnostics_response,
-                    &mut self.charge_point_state,
+                    &mut charge_point_state,
                 );
             }
             _ => {}
         }
+
+        drop(charge_point_state);
 
         match self.get_pending_message() {
             Some(pending_message) => Ok(pending_message.payload),
