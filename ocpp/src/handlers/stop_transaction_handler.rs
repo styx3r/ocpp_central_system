@@ -1,6 +1,7 @@
-use std::sync::{Arc, Mutex};
-use rust_ocpp::v1_6::messages::stop_transaction;
-use rust_ocpp::v1_6::types::{AuthorizationStatus, IdTagInfo, Reason};
+use rust_ocpp::v1_6::{
+    messages::stop_transaction,
+    types::{AuthorizationStatus, IdTagInfo},
+};
 
 use crate::ocpp_types::CustomError;
 use crate::{ChargePointState, Transaction};
@@ -9,10 +10,8 @@ use crate::{ChargePointState, Transaction};
 
 pub(crate) fn handle_stop_transaction_request(
     stop_transaction_request: &stop_transaction::StopTransactionRequest,
-    charge_point_state: Arc<Mutex<ChargePointState>>,
+    charge_point_state: &mut ChargePointState,
 ) -> Result<stop_transaction::StopTransactionResponse, CustomError> {
-    let mut charge_point_state = charge_point_state.lock().unwrap();
-
     let transaction = Transaction {
         id_tag: stop_transaction_request.id_tag.clone(),
         transaction_id: stop_transaction_request.transaction_id,
@@ -47,13 +46,14 @@ pub(crate) fn handle_stop_transaction_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_ocpp::v1_6::types::Reason;
 
     static UNITTEST_ID_TAG: &str = "ID_TAG";
     static UNITTEST_TRANSACTION_ID: i32 = 1;
 
     #[test]
     fn stop_transaction_request_without_running_transaction() -> Result<(), CustomError> {
-        let charge_point_state = Arc::new(Mutex::new(ChargePointState::default()));
+        let mut charge_point_state = ChargePointState::default();
         let response = handle_stop_transaction_request(
             &stop_transaction::StopTransactionRequest {
                 id_tag: Some(UNITTEST_ID_TAG.to_owned()),
@@ -63,7 +63,7 @@ mod tests {
                 reason: Some(Reason::Local),
                 transaction_data: None,
             },
-            Arc::clone(&charge_point_state),
+            &mut charge_point_state,
         )?;
 
         assert_eq!(
@@ -80,11 +80,13 @@ mod tests {
 
     #[test]
     fn stop_transaction_request_with_running_transaction_and_id_tag() -> Result<(), CustomError> {
-        let charge_point_state = Arc::new(Mutex::new(ChargePointState::default()));
-        charge_point_state.lock().unwrap().running_transactions.push(Transaction {
-            id_tag: Some(UNITTEST_ID_TAG.to_string()),
-            transaction_id: UNITTEST_TRANSACTION_ID,
-        });
+        let mut charge_point_state = ChargePointState::default();
+        charge_point_state
+            .running_transactions
+            .push(Transaction {
+                id_tag: Some(UNITTEST_ID_TAG.to_string()),
+                transaction_id: UNITTEST_TRANSACTION_ID,
+            });
 
         let response = handle_stop_transaction_request(
             &stop_transaction::StopTransactionRequest {
@@ -95,7 +97,7 @@ mod tests {
                 reason: Some(Reason::Local),
                 transaction_data: None,
             },
-            Arc::clone(&charge_point_state),
+            &mut charge_point_state,
         )?;
 
         assert_eq!(
@@ -113,11 +115,13 @@ mod tests {
     #[test]
     fn stop_transaction_request_with_running_transaction_and_no_id_tag() -> Result<(), CustomError>
     {
-        let charge_point_state = Arc::new(Mutex::new(ChargePointState::default()));
-        charge_point_state.lock().unwrap().running_transactions.push(Transaction {
-            id_tag: Some(UNITTEST_ID_TAG.to_string()),
-            transaction_id: UNITTEST_TRANSACTION_ID,
-        });
+        let mut charge_point_state = ChargePointState::default();
+        charge_point_state
+            .running_transactions
+            .push(Transaction {
+                id_tag: Some(UNITTEST_ID_TAG.to_string()),
+                transaction_id: UNITTEST_TRANSACTION_ID,
+            });
 
         let response = handle_stop_transaction_request(
             &stop_transaction::StopTransactionRequest {
@@ -128,7 +132,7 @@ mod tests {
                 reason: Some(Reason::Local),
                 transaction_data: None,
             },
-            Arc::clone(&charge_point_state),
+            &mut charge_point_state,
         )?;
 
         assert_eq!(

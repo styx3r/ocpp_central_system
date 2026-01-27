@@ -1,4 +1,3 @@
-use std::sync::{Arc, Mutex};
 use crate::ChargePointState;
 
 use rust_ocpp::v1_6::messages::clear_charging_profile;

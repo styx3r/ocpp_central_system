@@ -343,7 +343,7 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook> Visitor<Result<String,
                 >(request.json)?;
                 serde_json::to_value(&handle_stop_transaction_request(
                     &stop_transaction_request,
-                    Arc::clone(&self.charge_point_state),
+                    &mut charge_point_state,
                 )?)?
             }
             MessageTypeName::LogStatusNotification => {

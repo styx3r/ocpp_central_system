@@ -1,4 +1,4 @@
-use rust_ocpp::v1_6::{messages::status_notification, types::ChargePointStatus};
+use rust_ocpp::v1_6::messages::status_notification;
 
 use crate::{OcppStatusNotificationHook, ocpp_types::CustomError};
 use log::{info, error};
