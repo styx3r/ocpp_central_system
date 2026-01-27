@@ -1,8 +1,6 @@
 use log::info;
-use std::sync::{Arc, Mutex};
 
 use crate::OcppHooks;
-use fronius::FroniusApi;
 
 use config::config::ChargePoint;
 use ocpp::{
@@ -94,7 +92,7 @@ fn calculate_max_charging_current(
     let (uuid, set_charging_profile_request) = SetChargingProfileBuilder::new(
         CONNECTOR_ID,
         CHARGING_PROFILE_ID,
-        ChargingProfilePurposeType::ChargePointMaxProfile,
+        ChargingProfilePurposeType::TxDefaultProfile,
         ChargingProfileKindType::Relative,
         ChargingRateUnitType::A,
     )
@@ -120,6 +118,8 @@ fn calculate_max_charging_current(
 #[cfg(test)]
 mod tests {
     use ocpp::OcppMeterValuesHook;
+    use fronius::FroniusApi;
+    use std::sync::{Arc, Mutex};
 
     use super::*;
 

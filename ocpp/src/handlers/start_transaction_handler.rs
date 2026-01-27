@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use rust_ocpp::v1_6::messages::start_transaction;
 use rust_ocpp::v1_6::types::{AuthorizationStatus, IdTagInfo};
 
