@@ -1,16 +1,9 @@
-use crate::builders::{MessageBuilder, set_charging_profile_builder::SetChargingProfileBuilder};
 use crate::ocpp_types::{CustomError, MessageTypeName};
-use crate::{ChargePointState, OcppMeterValuesHook, RequestToSend};
-use config::config;
+use crate::{ChargePointState, OcppMeterValuesHook};
 use std::sync::{Arc, Mutex};
 
 use rust_ocpp::v1_6::messages::meter_values;
-use rust_ocpp::v1_6::types::{
-    ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType, Location,
-    MeterValue, Phase, SampledValue, UnitOfMeasure,
-};
-
-use rust_decimal::Decimal;
+use rust_ocpp::v1_6::types::UnitOfMeasure;
 
 use log::{error, info};
 
@@ -32,18 +25,16 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
         for sampled_value in &meter_value.sampled_value {
             match sampled_value.measurand {
                 Some(rust_ocpp::v1_6::types::Measurand::CurrentOffered) => {
-                    charge_point_state.latest_current =
-                        sampled_value.value.parse::<f64>().ok();
+                    charge_point_state.latest_current = sampled_value.value.parse::<f64>().ok();
                 }
                 Some(rust_ocpp::v1_6::types::Measurand::PowerOffered) => {
-                    charge_point_state.latest_power =
-                        match sampled_value.value.parse::<f64>() {
-                            Ok(v) => match sampled_value.unit {
-                                Some(UnitOfMeasure::Kw) => Some(v * 1000.0),
-                                _ => Some(v),
-                            },
-                            _ => None,
-                        }
+                    charge_point_state.latest_power = match sampled_value.value.parse::<f64>() {
+                        Ok(v) => match sampled_value.unit {
+                            Some(UnitOfMeasure::Kw) => Some(v * 1000.0),
+                            _ => Some(v),
+                        },
+                        _ => None,
+                    }
                 }
                 Some(rust_ocpp::v1_6::types::Measurand::Voltage) => {
                     match (system_voltage, sampled_value.value.parse::<f64>()) {
@@ -63,11 +54,7 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
 
     charge_point_state.latest_voltage = system_voltage;
 
-    match hook
-        .lock()
-        .unwrap()
-        .evaluate(charge_point_state)
-    {
+    match hook.lock().unwrap().evaluate(charge_point_state) {
         Err(err) => error!("Hook failed: {}", err),
         _ => {}
     }
@@ -79,21 +66,13 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
 
 #[cfg(test)]
 mod tests {
-    use rust_ocpp::v1_6::types::{Measurand, ReadingContext, ValueFormat};
+    use rust_ocpp::v1_6::types::{
+        Location, Measurand, MeterValue, Phase, ReadingContext, SampledValue, ValueFormat,
+    };
 
     use super::*;
 
     static UNITTEST_CONNECTOR_ID: u32 = 1;
-    static UNITTEST_CHARGING_POINT_MODEL: &str = "MODEL";
-    static UNITTEST_CHARGE_POINT_VENDOR: &str = "VENDOR";
-    static UNITTEST_CHARGING_POINT_SERIAL: &str = "SERIAL_NUMBER";
-
-    static UNITTEST_HEARTBEAT_INTERVAL: u32 = 60;
-    static UNITTEST_MAX_CHARGING_POWER: f64 = 11000.0;
-    static UNITTEST_SYSTEM_VOLTAGE: f64 = 400.0;
-    static UNITTEST_DEFAULT_CURRENT: f64 = 16.0;
-    static UNITTEST_COS_PHI: f64 = 0.86;
-    static UNITTEST_MINIMUM_CHARGING_CURRENT: f64 = 6.0;
 
     struct Hook {
         pub called: bool,
@@ -126,7 +105,7 @@ mod tests {
                 meter_value: vec![],
             },
             &mut charge_point_state,
-            Arc::clone(&hook)
+            Arc::clone(&hook),
         )?;
 
         assert_eq!(response, meter_values::MeterValuesResponse {});
@@ -247,7 +226,7 @@ mod tests {
                 }],
             },
             &mut charge_point_state,
-            Arc::clone(&hook)
+            Arc::clone(&hook),
         )?;
 
         assert_eq!(response, meter_values::MeterValuesResponse {});
