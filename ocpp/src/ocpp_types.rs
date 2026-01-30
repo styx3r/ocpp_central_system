@@ -69,6 +69,7 @@ pub enum MessageTypeName {
 
     // Initiated by CentralSystem
     RemoteStartTransaction,
+    RemoteStopTransaction,
     TriggerMessage,
     SetChargingProfile,
     GetDiagnostics,
@@ -100,6 +101,7 @@ impl fmt::Display for MessageTypeName {
 
             // Initiated by CentralSystem
             MessageTypeName::RemoteStartTransaction => write!(f, "RemoteStartTransaction"),
+            MessageTypeName::RemoteStopTransaction => write!(f, "RemoteStopTransaction"),
             MessageTypeName::TriggerMessage => write!(f, "TriggerMessage"),
             MessageTypeName::SetChargingProfile => write!(f, "SetChargingProfile"),
             MessageTypeName::GetDiagnostics => write!(f, "GetDiagnostics"),

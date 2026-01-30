@@ -1,7 +1,7 @@
 use rust_ocpp::v1_6::messages::status_notification;
 
-use crate::{OcppStatusNotificationHook, ocpp_types::CustomError};
-use log::{info, error};
+use crate::{ChargePointState, OcppStatusNotificationHook, ocpp_types::CustomError};
+use log::{error, info};
 
 use std::sync::{Arc, Mutex};
 
@@ -9,14 +9,15 @@ use std::sync::{Arc, Mutex};
 
 pub(crate) fn handle_status_notification_request<T: OcppStatusNotificationHook>(
     status_notification: &status_notification::StatusNotificationRequest,
-    hook: Arc<Mutex<T>>
+    charge_point_state: &mut ChargePointState,
+    hook: Arc<Mutex<T>>,
 ) -> Result<status_notification::StatusNotificationResponse, CustomError> {
     info!(
         "Received StatusNotificationRequest with context: {:?}",
         status_notification
     );
 
-    match hook.lock().unwrap().evaluate(status_notification) {
+    match hook.lock().unwrap().evaluate(status_notification, charge_point_state) {
         Err(err) => error!("Hook failed: {}", err),
         _ => {}
     }
@@ -33,7 +34,7 @@ mod tests {
     static UNITTEST_CONNECTOR_ID: u32 = 1;
 
     struct Hook {
-        pub called: bool
+        pub called: bool,
     }
 
     impl Hook {
@@ -44,9 +45,10 @@ mod tests {
 
     impl OcppStatusNotificationHook for Hook {
         fn evaluate(
-                &mut self,
-                _status_notification: &status_notification::StatusNotificationRequest,
-            ) -> Result<(), Box<dyn std::error::Error>> {
+            &mut self,
+            _status_notification: &status_notification::StatusNotificationRequest,
+            _charge_point_state: &mut ChargePointState,
+        ) -> Result<(), Box<dyn std::error::Error>> {
             self.called = true;
 
             Ok(())
@@ -56,8 +58,8 @@ mod tests {
     #[test]
     fn status_notification() -> Result<(), CustomError> {
         let hook = Arc::new(Mutex::new(Hook::default()));
-        let response =
-            handle_status_notification_request(&status_notification::StatusNotificationRequest {
+        let response = handle_status_notification_request(
+            &status_notification::StatusNotificationRequest {
                 connector_id: UNITTEST_CONNECTOR_ID,
                 error_code: rust_ocpp::v1_6::types::ChargePointErrorCode::NoError,
                 info: None,
@@ -66,7 +68,9 @@ mod tests {
                 vendor_id: None,
                 vendor_error_code: None,
             },
-            Arc::clone(&hook))?;
+            &mut ChargePointState::default(),
+            Arc::clone(&hook),
+        )?;
 
         assert!(hook.lock().unwrap().called);
         assert_eq!(response, status_notification::StatusNotificationResponse {});

@@ -7,7 +7,7 @@ use rust_ocpp::v1_6::types::ChargingProfilePurposeType;
 
 //-------------------------------------------------------------------------------------------------
 
-pub(crate) struct ClearChargingProfileBuilder {
+pub struct ClearChargingProfileBuilder {
     id: Option<i32>,
     connector_id: Option<i32>,
     charging_profile_purpose: Option<ChargingProfilePurposeType>,
@@ -19,7 +19,7 @@ pub(crate) struct ClearChargingProfileBuilder {
 }
 
 impl ClearChargingProfileBuilder {
-    pub(crate) fn default() -> Self {
+    pub fn default() -> Self {
         Self {
             id: None,
             connector_id: None,
@@ -30,7 +30,7 @@ impl ClearChargingProfileBuilder {
         }
     }
 
-    pub(crate) fn new(
+    pub fn new(
         id: Option<i32>,
         connector_id: Option<i32>,
         charging_profile_purpose: Option<ChargingProfilePurposeType>,
@@ -66,7 +66,7 @@ impl MessageBuilder<messages::clear_charging_profile::ClearChargingProfileReques
             ))
     }
 
-    fn build(&mut self) -> &mut Self {
+    fn build(mut self) -> impl MessageBuilder<messages::clear_charging_profile::ClearChargingProfileRequest> {
         self.clear_charging_profile_request = Some(
             messages::clear_charging_profile::ClearChargingProfileRequest {
                 id: self.id,

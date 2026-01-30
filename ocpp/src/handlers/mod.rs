@@ -18,5 +18,6 @@ pub(crate) mod change_configuration_handler;
 pub(crate) mod clear_charging_profile_handler;
 pub(crate) mod get_diagnostics_handler;
 pub(crate) mod remote_start_transaction_handler;
+pub(crate) mod remote_stop_transaction_handler;
 pub(crate) mod set_charging_profile_handler;
 pub(crate) mod trigger_message_handler;

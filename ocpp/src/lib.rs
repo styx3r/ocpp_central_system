@@ -19,24 +19,30 @@ use std::sync::{Arc, Mutex};
 
 //-------------------------------------------------------------------------------------------------
 
-pub use rust_ocpp::v1_6::messages::status_notification::StatusNotificationRequest;
+pub use builders::{
+    MessageBuilder, charging_profile_builder, clear_charging_profile_builder,
+    remote_start_transaction_builder, remote_stop_transaction_builder,
+    set_charging_profile_builder,
+};
+pub use rust_ocpp::v1_6::messages::{
+    authorize::AuthorizeRequest, status_notification::StatusNotificationRequest,
+};
 pub use rust_ocpp::v1_6::types::ChargePointStatus;
 
 pub trait OcppStatusNotificationHook {
     fn evaluate(
         &mut self,
         status_notification: &StatusNotificationRequest,
+        charge_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 //-------------------------------------------------------------------------------------------------
 
 pub use crate::ocpp_types::CustomError;
-pub use builders::MessageBuilder;
-pub use builders::set_charging_profile_builder::SetChargingProfileBuilder;
 pub use rust_decimal::Decimal;
 pub use rust_ocpp::v1_6::types::{
-    ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType,
+    ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType, RecurrencyKindType,
 };
 
 pub trait OcppMeterValuesHook {
@@ -48,7 +54,17 @@ pub trait OcppMeterValuesHook {
 
 //-------------------------------------------------------------------------------------------------
 
-#[derive(Debug, PartialEq)]
+pub trait OcppAuthorizationHook {
+    fn evaluate(
+        &mut self,
+        authorization_request: &AuthorizeRequest,
+        charge_point_state: &mut ChargePointState,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Transaction {
     pub id_tag: Option<String>,
     pub transaction_id: i32,
@@ -61,17 +77,87 @@ pub struct RequestToSend {
     pub payload: String,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ChargePointState {
-    pub latest_cos_phi: Option<f64>,
-    pub latest_power: Option<f64>,
-    pub latest_current: Option<f64>,
-    pub latest_voltage: Option<f64>,
-    pub max_current: Option<f64>,
+    latest_cos_phi: Option<f64>,
+    latest_power: Option<f64>,
+    latest_current: Option<f64>,
+    latest_voltage: Option<f64>,
+    max_current: Option<f64>,
 
-    pub requests_to_send: Vec<RequestToSend>,
-    pub requests_awaiting_confirmation: Vec<RequestToSend>,
-    pub running_transactions: Vec<Transaction>,
+    requests_to_send: Vec<RequestToSend>,
+    requests_awaiting_confirmation: Vec<RequestToSend>,
+    running_transactions: Vec<Transaction>,
+
+    remote_start_transaction_id_tags: Vec<String>,
+}
+
+impl ChargePointState {
+    pub fn new(cos_phi: f64, power: f64, current: f64, voltage: f64) -> Self {
+        Self {
+            latest_cos_phi: Some(cos_phi),
+            latest_power: Some(power),
+            latest_current: Some(current),
+            latest_voltage: Some(voltage),
+            max_current: None,
+            requests_to_send: vec![],
+            requests_awaiting_confirmation: vec![],
+            running_transactions: vec![],
+            remote_start_transaction_id_tags: vec![],
+        }
+    }
+
+    pub fn get_latest_cos_phi(&self) -> Option<f64> {
+        self.latest_cos_phi
+    }
+
+    pub fn get_latest_power(&self) -> Option<f64> {
+        self.latest_power
+    }
+
+    pub fn get_latest_current(&self) -> Option<f64> {
+        self.latest_current
+    }
+
+    pub fn get_latest_voltage(&self) -> Option<f64> {
+        self.latest_voltage
+    }
+
+    pub fn get_max_current(&self) -> Option<f64> {
+        self.max_current
+    }
+
+    pub fn get_requests_to_send(&self) -> &Vec<RequestToSend> {
+        &self.requests_to_send
+    }
+
+    pub fn get_remote_start_transaction_id_tags(&self) -> &Vec<String> {
+        &self.remote_start_transaction_id_tags
+    }
+
+    pub fn get_running_transaction_ids(&self) -> &Vec<Transaction> {
+        &self.running_transactions
+    }
+
+    pub fn set_latest_cos_phi(&mut self, cos_phi: f64) {
+        self.latest_cos_phi = Some(cos_phi);
+    }
+
+    pub fn set_max_current(&mut self, max_current: f64) {
+        self.max_current = Some(max_current);
+    }
+
+    pub fn add_request_to_send(&mut self, request_to_send: RequestToSend) {
+        self.requests_to_send.push(request_to_send);
+    }
+
+    pub fn add_remote_transaction_id_tag(&mut self, id_tag: String) {
+        self.remote_start_transaction_id_tags.push(id_tag);
+    }
+
+    pub fn clear_remote_start_transaction_id_tags(&mut self) {
+        self.remote_start_transaction_id_tags.clear();
+    }
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -81,7 +167,7 @@ fn dispatch_message<T>(
     text: &Utf8Bytes,
 ) -> Vec<String>
 where
-    T: OcppStatusNotificationHook + OcppMeterValuesHook,
+    T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook,
 {
     let mut response_messages: Vec<String> = vec![];
     match ocpp_central_system.process_text_message(&text) {
@@ -107,7 +193,7 @@ where
 
 //-------------------------------------------------------------------------------------------------
 
-pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook>(
+pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook>(
     config: &Config,
     ocpp_hooks: Arc<Mutex<T>>,
 ) -> Result<(), Box<dyn Error>> {

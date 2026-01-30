@@ -5,6 +5,13 @@ username = "USERNAME"
 password = "PASSWORD"
 url = "URL"
 
+[awattar]
+base_url = "https://api.awattar.at/v1/marketdata"
+
+[electric_vehicle]
+# Average kWh needed to charge from 20% to 80%
+average_kilowatt_hours_needed = 30000
+
 [[id_tags]]
 id = ""
 
@@ -15,10 +22,12 @@ port = 8080
 [charging_point]
 # SerialNumber of the ChargingPoint where the following settings apply.
 serial_number = ""
+
+# HeartBeat interval in seconds
 heartbeat_interval = 60
 
 # Maximum charging power which shall be offered by the ChargingPoint. This will be set as
-# default ChargingProfile.
+# default TxChargingProfile.
 max_charging_power = 11000
 
 # Default system voltage is assumed to be sqrt(3) * 400V for 3 phase AC systems.

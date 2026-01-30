@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 use config::config;
 
 use ocpp::{
-    ChargePointState, OcppMeterValuesHook, OcppStatusNotificationHook, StatusNotificationRequest,
+    AuthorizeRequest, ChargePointState, OcppAuthorizationHook, OcppMeterValuesHook,
+    OcppStatusNotificationHook, StatusNotificationRequest,
 };
 
 use serde::Deserialize;
@@ -38,6 +39,7 @@ impl OcppStatusNotificationHook for Hook {
     fn evaluate(
         &mut self,
         _status_notification: &StatusNotificationRequest,
+        _charge_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.called = true;
         Ok(())
@@ -47,6 +49,16 @@ impl OcppStatusNotificationHook for Hook {
 impl OcppMeterValuesHook for Hook {
     fn evaluate(
         &mut self,
+        _charge_point_state: &mut ChargePointState,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        unimplemented!("This hook needs to be implemented!");
+    }
+}
+
+impl OcppAuthorizationHook for Hook {
+    fn evaluate(
+        &mut self,
+        _authorization_request: &AuthorizeRequest,
         _charge_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
         unimplemented!("This hook needs to be implemented!");
@@ -137,6 +149,12 @@ fn boot_notification() -> Result<(), Box<dyn Error>> {
             password: "TEST".into(),
             url: "127.0.0.1:8081".into(),
         },
+        awattar: config::Awattar {
+            base_url: "".to_owned(),
+        },
+        electric_vehicle: config::Ev {
+            average_kilowatt_hours_needed: 0,
+        },
     };
 
     let hook = Arc::new(Mutex::new(Hook::default()));
@@ -175,6 +193,12 @@ fn charging_status_notification() -> Result<(), Box<dyn Error>> {
             username: "TEST".into(),
             password: "TEST".into(),
             url: "127.0.0.1:8081".into(),
+        },
+        awattar: config::Awattar {
+            base_url: "".to_owned(),
+        },
+        electric_vehicle: config::Ev {
+            average_kilowatt_hours_needed: 0,
         },
     };
 

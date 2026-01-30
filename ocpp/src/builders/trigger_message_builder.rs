@@ -43,7 +43,7 @@ impl MessageBuilder<messages::trigger_message::TriggerMessageRequest> for Trigge
             ))
     }
 
-    fn build(&mut self) -> &mut Self {
+    fn build(mut self) -> impl MessageBuilder<rust_ocpp::v1_6::messages::trigger_message::TriggerMessageRequest> {
         self.trigger_message_request = Some(messages::trigger_message::TriggerMessageRequest {
             requested_message: self.trigger_message.clone(),
             connector_id: self.connector_id,

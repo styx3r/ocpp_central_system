@@ -45,7 +45,7 @@ impl MessageBuilder<messages::change_configuration::ChangeConfigurationRequest>
             ))
     }
 
-    fn build(&mut self) -> &mut Self {
+    fn build(mut self) -> impl MessageBuilder<messages::change_configuration::ChangeConfigurationRequest> {
         self.change_configuration_request =
             Some(messages::change_configuration::ChangeConfigurationRequest {
                 key: self.key.clone(),

@@ -54,6 +54,21 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
 
     charge_point_state.latest_voltage = system_voltage;
 
+    if let Some(latest_current) = charge_point_state.latest_current
+            && let Some(latest_power) = charge_point_state.latest_power
+            && let Some(latest_voltage) = charge_point_state.latest_voltage
+    {
+        charge_point_state.latest_cos_phi = Some(latest_power / (latest_voltage * latest_current));
+
+        info!(
+            "Calculated cos(phi): {} / ({} * {}) = {}",
+            latest_power,
+            latest_voltage,
+            latest_current,
+            charge_point_state.get_latest_cos_phi().unwrap_or(1.0)
+        );
+    }
+
     match hook.lock().unwrap().evaluate(charge_point_state) {
         Err(err) => error!("Hook failed: {}", err),
         _ => {}
@@ -87,7 +102,7 @@ mod tests {
     impl OcppMeterValuesHook for Hook {
         fn evaluate(
             &mut self,
-            _meter_values: &mut ChargePointState,
+            _charge_point_state: &mut ChargePointState,
         ) -> Result<(), Box<dyn std::error::Error>> {
             self.called = true;
             Ok(())
@@ -234,8 +249,8 @@ mod tests {
         assert_eq!(charge_point_state.latest_current, Some(9.0));
         assert_eq!(charge_point_state.latest_voltage, Some(695.9));
         assert_eq!(charge_point_state.latest_power, Some(6255.9));
+        assert_eq!(charge_point_state.latest_cos_phi, Some(0.9988504095416009));
 
-        assert_eq!(charge_point_state.latest_cos_phi, None);
         assert_eq!(charge_point_state.max_current, None);
 
         Ok(())
