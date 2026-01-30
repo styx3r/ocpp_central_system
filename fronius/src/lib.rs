@@ -216,6 +216,7 @@ impl FroniusApi {
             return Err("Could not un-block Battery!".into());
         }
 
+        info!("Battery unblocked!");
         Ok(())
     }
 }
