@@ -96,8 +96,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let hooks = Arc::new(Mutex::new(OcppHooks::new(
         FroniusApi::new(&config.fronius),
-        config.charging_point.clone(),
+        config.clone(),
     )));
+
     ocpp::run::<OcppHooks>(&config, Arc::clone(&hooks))?;
 
     Ok(())

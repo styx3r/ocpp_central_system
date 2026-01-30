@@ -13,3 +13,5 @@ toml = "0.9.11"
 config = { path = "../config/" }
 ocpp = { path = "../ocpp/" }
 fronius = { path = "../fronius/" }
+awattar = { path = "../awattar/" }
+uuid = "1.20.0"
