@@ -1,0 +1,12 @@
+[package]
+name = "awattar"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+config = { path = "../config/" }
+reqwest = { version = "0.12.4", features = ["blocking", "json"] }
+serde_json = "1.0.149"
+serde = { version = "1.0.219", features = [ "derive" ] }
+chrono = "0.4.43"
+log = "0.4.29"

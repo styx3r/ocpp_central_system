@@ -6,7 +6,9 @@ pub struct Config {
     pub charging_point: ChargePoint,
     pub id_tags: Vec<IdTag>,
     pub log_directory: String,
-    pub fronius: Fronius
+    pub fronius: Fronius,
+    pub awattar: Awattar,
+    pub electric_vehicle: Ev
 }
 
 #[derive(Deserialize, Clone)]
@@ -46,4 +48,14 @@ pub struct Fronius {
     pub username: String,
     pub password: String,
     pub url: String
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Awattar {
+    pub base_url: String
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Ev {
+    pub average_kilowatt_hours_needed: u64
 }
