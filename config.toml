@@ -9,8 +9,8 @@ url = "URL"
 base_url = "https://api.awattar.at/v1/marketdata"
 
 [electric_vehicle]
-# Average kWh needed to charge from 20% to 80%
-average_kilowatt_hours_needed = 30000
+# Average Wh needed to charge from 20% to 80%
+average_watt_hours_needed = 30000
 
 [[id_tags]]
 id = ""

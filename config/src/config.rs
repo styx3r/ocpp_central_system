@@ -57,5 +57,5 @@ pub struct Awattar {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Ev {
-    pub average_kilowatt_hours_needed: u64
+    pub average_watt_hours_needed: u64
 }

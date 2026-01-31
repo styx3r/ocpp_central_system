@@ -43,7 +43,7 @@ fn parse_api_response(response: &str) -> Result<MarketData, Box<dyn std::error::
 //-------------------------------------------------------------------------------------------------
 
 fn find_cheapest_period(market_data: &MarketData, config: &config::Config) -> Option<Period> {
-    let window_size = (config.electric_vehicle.average_kilowatt_hours_needed as f64
+    let window_size = (config.electric_vehicle.average_watt_hours_needed as f64
         / config.charging_point.max_charging_power.ceil()) as usize;
     let sliding_windows_average = market_data
         .data
@@ -299,7 +299,7 @@ mod tests {
                 base_url: "".to_owned(),
             },
             electric_vehicle: config::Ev {
-                average_kilowatt_hours_needed: 30000,
+                average_watt_hours_needed: 30000,
             },
         };
 
