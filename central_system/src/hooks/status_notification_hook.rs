@@ -7,7 +7,7 @@ use ocpp::{
     clear_charging_profile_builder::ClearChargingProfileBuilder,
     remote_start_transaction_builder::RemoteStartTransactionBuilder,
 };
-use std::{char, time::Duration};
+use std::time::Duration;
 
 use crate::{
     OcppHooks,

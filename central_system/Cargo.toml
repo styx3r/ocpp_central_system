@@ -1,7 +1,11 @@
 [package]
-name = "OCPPCentralSystem"
+name = "ocppcentral_system"
 version = "0.1.1"
 edition = "2024"
+
+[[bin]]
+name = "OCPPCentralSystem"
+path = "src/main.rs"
 
 [dependencies]
 log = "0.4.29"

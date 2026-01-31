@@ -1,25 +1,13 @@
+use std::error::Error;
 use std::fs;
 use std::path::Path;
-use std::{
-    error::Error,
-    sync::{Arc, Mutex},
-};
 
 use config::config::Config;
 
 use ftail::Ftail;
-use log::{LevelFilter, info};
+use log::LevelFilter;
 
 use clap::Parser;
-
-mod hooks;
-
-use fronius::FroniusApi;
-use hooks::OcppHooks;
-
-//-------------------------------------------------------------------------------------------------
-
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 //-------------------------------------------------------------------------------------------------
 
@@ -94,14 +82,5 @@ fn main() -> Result<(), Box<dyn Error>> {
         .retention_days(14)
         .init()?; // initialize logger
 
-    info!("Starting OCPPCentralSystem v{}", VERSION);
-
-    let hooks = Arc::new(Mutex::new(OcppHooks::new(
-        FroniusApi::new(&config.fronius),
-        config.clone(),
-    )));
-
-    ocpp::run::<OcppHooks>(&config, Arc::clone(&hooks))?;
-
-    Ok(())
+    ocppcentral_system::run(&config)
 }

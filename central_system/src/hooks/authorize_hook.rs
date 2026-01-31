@@ -1,7 +1,6 @@
 use crate::OcppHooks;
 use log::info;
 
-use config::config;
 use ocpp::{
     AuthorizeRequest, ChargePointState, ChargingProfilePurposeType, MessageBuilder,
     MessageTypeName, clear_charging_profile_builder::ClearChargingProfileBuilder,

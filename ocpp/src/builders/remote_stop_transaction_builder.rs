@@ -3,7 +3,6 @@ use crate::ocpp_types::{CustomError, MessageTypeName};
 use crate::builders::MessageBuilder;
 
 use rust_ocpp::v1_6::messages;
-use rust_ocpp::v1_6::types::ChargingProfile;
 
 //-------------------------------------------------------------------------------------------------
 
