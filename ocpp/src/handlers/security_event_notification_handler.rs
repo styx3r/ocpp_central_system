@@ -9,9 +9,10 @@ pub(crate) fn handle_security_event_notification_request(
     security_event_notification_request: &security_event_notification::SecurityEventNotificationRequest,
 ) -> Result<security_event_notification::SecurityEventNotificationResponse, CustomError> {
     warn!(
-        "Received {} with context: {:?}",
+        "Received {} with context: {} and tech info: {:?}",
         MessageTypeName::SecurityEventNotification,
-        security_event_notification_request
+        security_event_notification_request.kind,
+        security_event_notification_request.tech_info,
     );
 
     Ok(security_event_notification::SecurityEventNotificationResponse {})

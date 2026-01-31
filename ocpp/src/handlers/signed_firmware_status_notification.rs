@@ -9,9 +9,9 @@ pub(crate) fn handle_signed_firmware_status_notification_request(
     signed_firmware_status_notification_request: &firmware_status_notification::FirmwareStatusNotificationRequest,
 ) -> Result<firmware_status_notification::FirmwareStatusNotificationResponse, CustomError> {
     warn!(
-        "Received {} with context: {:?}",
+        "Received {} with status: {:?}",
         MessageTypeName::FirmwareStatusNotification,
-        signed_firmware_status_notification_request
+        signed_firmware_status_notification_request.status
     );
 
     Ok(firmware_status_notification::FirmwareStatusNotificationResponse {})

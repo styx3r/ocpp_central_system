@@ -17,10 +17,10 @@ pub(crate) fn handle_start_transaction_request(
         .find(|e| e.id == start_transaction.id_tag)
     {
         Some(_) => AuthorizationStatus::Accepted,
-        None => AuthorizationStatus::Blocked,
+        None => AuthorizationStatus::Invalid,
     };
 
-    let transaction_id = chrono::offset::Utc::now().timestamp() as i32;
+    let transaction_id = (charge_point_state.running_transactions.len() + 1) as i32;
     let start_transaction_response = start_transaction::StartTransactionResponse {
         id_tag_info: IdTagInfo {
             expiry_date: None,

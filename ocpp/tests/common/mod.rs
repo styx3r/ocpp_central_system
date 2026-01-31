@@ -20,6 +20,7 @@ pub struct IntegrationTest {
 
 impl IntegrationTest {
     pub fn new(config: config::Config, hook: Arc<Mutex<Hook>>) -> Self {
+        let _ = env_logger::try_init();
         Self {
             config,
             join_handles: vec![],

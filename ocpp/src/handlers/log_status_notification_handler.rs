@@ -11,7 +11,7 @@ pub(crate) fn handle_log_status_notification_request(
     warn!(
         "Received {} with context: {:?}",
         MessageTypeName::LogStatusNotification,
-        log_status_notification_request
+        log_status_notification_request.status
     );
 
     Ok(log_status_notification::LogStatusNotificationResponse {})

@@ -40,7 +40,7 @@ use crate::{
 };
 
 use config::config::Config;
-use log::info;
+use log::{info, trace};
 
 use rusqlite::Connection;
 use tungstenite::Utf8Bytes;
@@ -240,6 +240,8 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
     ) -> Result<String, CustomError> {
         let charge_point_handle = self.charge_point_state.clone();
         let mut charge_point_state = charge_point_handle.lock().unwrap();
+
+        trace!("Visiting request message: {}", request.json);
 
         let response = match request.message_type {
             MessageTypeName::Authorize => {

@@ -13,8 +13,8 @@ pub(crate) fn handle_status_notification_request<T: OcppStatusNotificationHook>(
     hook: Arc<Mutex<T>>,
 ) -> Result<status_notification::StatusNotificationResponse, CustomError> {
     info!(
-        "Received StatusNotificationRequest with context: {:?}",
-        status_notification
+        "Received StatusNotificationRequest with status: {:?}",
+        status_notification.status
     );
 
     match hook.lock().unwrap().evaluate(status_notification, charge_point_state) {
