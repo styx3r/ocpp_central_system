@@ -90,6 +90,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         .max_file_size(50)
         .daily_file(Path::new(&config.log_directory), LevelFilter::Info) // log errors to daily files
+        .single_file(Path::new(&config.log_directory), true, LevelFilter::Trace)
+        .retention_days(14)
         .init()?; // initialize logger
 
     info!("Starting OCPPCentralSystem v{}", VERSION);

@@ -135,7 +135,7 @@ mod tests {
                     base_url: "".to_owned(),
                 },
                 electric_vehicle: config::Ev {
-                    average_kilowatt_hours_needed: 30000,
+                    average_watt_hours_needed: 30000,
                 },
             },
         )));
@@ -176,7 +176,7 @@ mod tests {
                     base_url: "".to_owned(),
                 },
                 electric_vehicle: config::Ev {
-                    average_kilowatt_hours_needed: 30000,
+                    average_watt_hours_needed: 30000,
                 },
             },
         )));
@@ -227,7 +227,7 @@ mod tests {
                     base_url: "".to_owned(),
                 },
                 electric_vehicle: config::Ev {
-                    average_kilowatt_hours_needed: 30000,
+                    average_watt_hours_needed: 30000,
                 },
             },
         )));

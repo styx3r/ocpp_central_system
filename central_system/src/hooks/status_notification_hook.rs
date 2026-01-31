@@ -67,10 +67,7 @@ impl ocpp::OcppStatusNotificationHook for OcppHooks {
                         DateTime::from_timestamp_millis(cheapest_period.start_timestamp)
                         && let Some(end_timestamp) =
                             DateTime::from_timestamp_millis(cheapest_period.end_timestamp)
-                        && let Some(limit) = Decimal::from_f64_retain(calculate_max_current(
-                            &self.config,
-                            charge_point_state,
-                        )?)
+                        && let Some(limit) = Decimal::from_f64_retain(max_current)
                     {
                         let now = Utc::now();
                         let charging_profile = ChargingProfileBuilder::new(
