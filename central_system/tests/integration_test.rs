@@ -2,14 +2,8 @@ mod common;
 
 use std::error::Error;
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex};
 
 use config::config;
-
-use ocpp::{
-    AuthorizeRequest, ChargePointState, OcppAuthorizationHook, OcppMeterValuesHook,
-    OcppStatusNotificationHook, StatusNotificationRequest,
-};
 
 use serde::Deserialize;
 use serde_json::json;
@@ -32,48 +26,6 @@ struct ExpectedJSONResponseFormat {
     message_id: u32,
     uuid: String,
     json: serde_json::Value,
-}
-
-pub struct Hook {
-    pub called: bool,
-}
-
-impl Hook {
-    pub fn default() -> Self {
-        Self { called: false }
-    }
-}
-
-impl OcppStatusNotificationHook for Hook {
-    fn evaluate(
-        &mut self,
-        _status_notification: &StatusNotificationRequest,
-        _charge_point_state: &mut ChargePointState,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        self.called = true;
-        Ok(())
-    }
-}
-
-impl OcppMeterValuesHook for Hook {
-    fn evaluate(
-        &mut self,
-        _charge_point_state: &mut ChargePointState,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        self.called = true;
-        Ok(())
-    }
-}
-
-impl OcppAuthorizationHook for Hook {
-    fn evaluate(
-        &mut self,
-        _authorization_request: &AuthorizeRequest,
-        _charge_point_state: &mut ChargePointState,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        self.called = true;
-        Ok(())
-    }
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -168,9 +120,7 @@ fn authorize_request() -> Result<(), Box<dyn Error>> {
         },
     };
 
-    let hook = Arc::new(Mutex::new(Hook::default()));
-    let mut integration_test = common::IntegrationTest::new(config, Arc::clone(&hook));
-
+    let mut integration_test = common::IntegrationTest::new(config);
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
 
@@ -192,9 +142,6 @@ fn authorize_request() -> Result<(), Box<dyn Error>> {
     }
 
     integration_test.teardown(log_directory.as_str(), &mut websocket);
-
-    assert!(hook.lock().unwrap().called);
-
     Ok(())
 }
 
@@ -233,8 +180,7 @@ fn boot_notification() -> Result<(), Box<dyn Error>> {
         },
     };
 
-    let hook = Arc::new(Mutex::new(Hook::default()));
-    let mut integration_test = common::IntegrationTest::new(config, Arc::clone(&hook));
+    let mut integration_test = common::IntegrationTest::new(config);
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -278,8 +224,7 @@ fn meter_values_request() -> Result<(), Box<dyn Error>> {
         },
     };
 
-    let hook = Arc::new(Mutex::new(Hook::default()));
-    let mut integration_test = common::IntegrationTest::new(config, Arc::clone(&hook));
+    let mut integration_test = common::IntegrationTest::new(config);
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -319,9 +264,6 @@ fn meter_values_request() -> Result<(), Box<dyn Error>> {
     }
 
     integration_test.teardown(log_directory.as_str(), &mut websocket);
-
-    assert!(hook.lock().unwrap().called);
-
     Ok(())
 }
 
@@ -360,8 +302,7 @@ fn start_transaction_blocked() -> Result<(), Box<dyn Error>> {
         },
     };
 
-    let hook = Arc::new(Mutex::new(Hook::default()));
-    let mut integration_test = common::IntegrationTest::new(config, Arc::clone(&hook));
+    let mut integration_test = common::IntegrationTest::new(config);
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -417,6 +358,7 @@ fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
         },
         id_tags: vec![config::IdTag {
             id: "VALID_ID_TAG".to_string(),
+            smart_charging: false
         }],
         log_directory: log_directory.to_owned(),
         fronius: config::Fronius {
@@ -432,8 +374,7 @@ fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
         },
     };
 
-    let hook = Arc::new(Mutex::new(Hook::default()));
-    let mut integration_test = common::IntegrationTest::new(config, Arc::clone(&hook));
+    let mut integration_test = common::IntegrationTest::new(config);
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -502,8 +443,7 @@ fn charging_status_notification() -> Result<(), Box<dyn Error>> {
         },
     };
 
-    let hook = Arc::new(Mutex::new(Hook::default()));
-    let mut integration_test = common::IntegrationTest::new(config, Arc::clone(&hook));
+    let mut integration_test = common::IntegrationTest::new(config);
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -533,10 +473,14 @@ fn charging_status_notification() -> Result<(), Box<dyn Error>> {
         _ => assert!(false),
     }
 
+    assert!(
+        integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .block_battery_for_duration_called
+    );
     integration_test.teardown(log_directory.as_str(), &mut websocket);
-
-    assert!(hook.lock().unwrap().called);
-
     Ok(())
 }
 
@@ -575,8 +519,7 @@ fn stop_transaction_blocked() -> Result<(), Box<dyn Error>> {
         },
     };
 
-    let hook = Arc::new(Mutex::new(Hook::default()));
-    let mut integration_test = common::IntegrationTest::new(config, Arc::clone(&hook));
+    let mut integration_test = common::IntegrationTest::new(config);
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -599,7 +542,10 @@ fn stop_transaction_blocked() -> Result<(), Box<dyn Error>> {
         Ok(response) => {
             assert_eq!(response.message_id, 3);
             assert_eq!(response.uuid, "12345");
-            assert_eq!(response.json, json!({ "idTagInfo": { "status": "Invalid" } }));
+            assert_eq!(
+                response.json,
+                json!({ "idTagInfo": { "status": "Invalid" } })
+            );
         }
         _ => assert!(false),
     }
@@ -643,8 +589,7 @@ fn heartbeat() -> Result<(), Box<dyn Error>> {
         },
     };
 
-    let hook = Arc::new(Mutex::new(Hook::default()));
-    let mut integration_test = common::IntegrationTest::new(config, Arc::clone(&hook));
+    let mut integration_test = common::IntegrationTest::new(config);
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -664,6 +609,172 @@ fn heartbeat() -> Result<(), Box<dyn Error>> {
         _ => assert!(false),
     }
 
+    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    Ok(())
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#[test]
+fn available_status_notification() -> Result<(), Box<dyn Error>> {
+    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
+    let config = config::Config {
+        websocket: config::Websocket {
+            ip: "127.0.0.1".to_owned(),
+            port: 8088,
+        },
+        charging_point: config::ChargePoint {
+            serial_number: "".to_owned(),
+            heartbeat_interval: 60,
+            max_charging_power: 11000.0,
+            default_system_voltage: 696.0,
+            default_current: 16.0,
+            default_cos_phi: 0.86,
+            minimum_charging_current: 6.0,
+            config_parameters: vec![],
+        },
+        id_tags: vec![],
+        log_directory: log_directory.to_owned(),
+        fronius: config::Fronius {
+            username: "TEST".into(),
+            password: "TEST".into(),
+            url: "127.0.0.1:8081".into(),
+        },
+        awattar: config::Awattar {
+            base_url: "".to_owned(),
+        },
+        electric_vehicle: config::Ev {
+            average_watt_hours_needed: 0,
+        },
+    };
+
+    let mut integration_test = common::IntegrationTest::new(config);
+
+    let mut websocket = integration_test.setup();
+    validate_initial_messages(&mut websocket)?;
+
+    static CHARGING_STATUS_NOTIFCATION: &str = r#"{
+        "connectorId": 1,
+        "errorCode": "NoError",
+        "info": "",
+        "status": "Available",
+        "timestamp": "2026-01-18T14:09:24Z",
+        "vendorId": "Schneider Electric",
+        "vendorErrorCode": "0.0"
+    }"#;
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"StatusNotification\",{}]",
+        CHARGING_STATUS_NOTIFCATION
+    )))?;
+
+    let message = websocket.read()?;
+    match serde_json::from_str::<ExpectedJSONResponseFormat>(message.to_text()?) {
+        Ok(response) => {
+            assert_eq!(response.message_id, 3);
+            assert_eq!(response.uuid, "12345");
+            assert_eq!(response.json, json!({}));
+        }
+        _ => assert!(false),
+    }
+
+    assert!(
+        !integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .block_battery_for_duration_called
+    );
+    assert!(
+        integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .unblock_battery_called
+    );
+    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    Ok(())
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#[test]
+fn suspendedev_status_notification() -> Result<(), Box<dyn Error>> {
+    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
+    let config = config::Config {
+        websocket: config::Websocket {
+            ip: "127.0.0.1".to_owned(),
+            port: 8089,
+        },
+        charging_point: config::ChargePoint {
+            serial_number: "".to_owned(),
+            heartbeat_interval: 60,
+            max_charging_power: 11000.0,
+            default_system_voltage: 696.0,
+            default_current: 16.0,
+            default_cos_phi: 0.86,
+            minimum_charging_current: 6.0,
+            config_parameters: vec![],
+        },
+        id_tags: vec![],
+        log_directory: log_directory.to_owned(),
+        fronius: config::Fronius {
+            username: "TEST".into(),
+            password: "TEST".into(),
+            url: "127.0.0.1:8081".into(),
+        },
+        awattar: config::Awattar {
+            base_url: "".to_owned(),
+        },
+        electric_vehicle: config::Ev {
+            average_watt_hours_needed: 0,
+        },
+    };
+
+    let mut integration_test = common::IntegrationTest::new(config);
+
+    let mut websocket = integration_test.setup();
+    validate_initial_messages(&mut websocket)?;
+
+    static CHARGING_STATUS_NOTIFCATION: &str = r#"{
+        "connectorId": 1,
+        "errorCode": "NoError",
+        "info": "",
+        "status": "SuspendedEV",
+        "timestamp": "2026-01-18T14:09:24Z",
+        "vendorId": "Schneider Electric",
+        "vendorErrorCode": "0.0"
+    }"#;
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"StatusNotification\",{}]",
+        CHARGING_STATUS_NOTIFCATION
+    )))?;
+
+    let response_message = websocket.read()?;
+    match serde_json::from_str::<ExpectedJSONResponseFormat>(response_message.to_text()?) {
+        Ok(response) => {
+            assert_eq!(response.message_id, 3);
+            assert_eq!(response.uuid, "12345");
+            assert_eq!(response.json, json!({}));
+        }
+        _ => assert!(false),
+    }
+
+    assert!(
+        !integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .block_battery_for_duration_called
+    );
+    assert!(
+        integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .unblock_battery_called
+    );
     integration_test.teardown(log_directory.as_str(), &mut websocket);
     Ok(())
 }

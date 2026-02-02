@@ -1,64 +1,68 @@
 use crate::OcppHooks;
+use awattar::AwattarApi;
+use fronius::FroniusApi;
 use log::info;
 
 use ocpp::{
     AuthorizeRequest, ChargePointState, ChargingProfilePurposeType, MessageBuilder,
     MessageTypeName, clear_charging_profile_builder::ClearChargingProfileBuilder,
-    remote_stop_transaction_builder::RemoteStopTransactionBuilder,
 };
 
 use crate::hooks::CONNECTOR_ID;
 
 //-------------------------------------------------------------------------------------------------
 
-impl ocpp::OcppAuthorizationHook for OcppHooks {
+fn clear_smart_charging_tx_charging_profile(
+    charge_point_state: &mut ChargePointState,
+) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Clearing TxChargingProfiles!");
+    let (uuid, clear_tx_charging_profile) = ClearChargingProfileBuilder::new(
+        None,
+        Some(CONNECTOR_ID),
+        Some(ChargingProfilePurposeType::TxProfile),
+        Some(0),
+    )
+    .build()
+    .serialize()?;
+
+    charge_point_state.add_request_to_send(ocpp::RequestToSend {
+        uuid: uuid.clone(),
+        message_type: MessageTypeName::ClearChargingProfile,
+        payload: clear_tx_charging_profile,
+    });
+
+    charge_point_state.disable_smart_charging();
+
+    Ok(())
+}
+
+//-------------------------------------------------------------------------------------------------
+
+impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, U> {
     fn evaluate(
         &mut self,
         authorization_request: &AuthorizeRequest,
         charge_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let remote_start_transaction_id_tag = charge_point_state
-            .get_remote_start_transaction_id_tags()
+        let id_tag = self
+            .config
+            .id_tags
             .iter()
-            .any(|e| *e == authorization_request.id_tag);
+            .find(|id_tag| id_tag.id == authorization_request.id_tag);
 
-        if !remote_start_transaction_id_tag {
+        if id_tag.is_none() {
             return Ok(());
         }
 
-        info!("Clearing TxChargingProfiles!");
-
-        let (uuid, clear_tx_charging_profile) = ClearChargingProfileBuilder::new(
-            None,
-            Some(CONNECTOR_ID),
-            Some(ChargingProfilePurposeType::TxProfile),
-            Some(0),
-        )
-        .build()
-        .serialize()?;
-
-        charge_point_state.add_request_to_send(ocpp::RequestToSend {
-            uuid: uuid.clone(),
-            message_type: MessageTypeName::ClearChargingProfile,
-            payload: clear_tx_charging_profile,
-        });
-
-        for running_transaction in charge_point_state.clone().get_running_transaction_ids() {
-            info!("Stoping transaction with ID {}", running_transaction.transaction_id);
-
-            let (uuid, remote_stop_transaction) =
-                RemoteStopTransactionBuilder::new(running_transaction.transaction_id)
-                    .build()
-                    .serialize()?;
-
-            charge_point_state.add_request_to_send(ocpp::RequestToSend {
-                uuid: uuid.clone(),
-                message_type: MessageTypeName::RemoteStopTransaction,
-                payload: remote_stop_transaction,
-            });
+        let smart_charging = id_tag.unwrap().smart_charging;
+        if smart_charging {
+            if !charge_point_state.get_running_transaction_ids().is_empty() {
+                clear_smart_charging_tx_charging_profile(charge_point_state)?;
+            }
+        } else {
+            self.calculate_smart_charging_tx_profile(charge_point_state)?;
         }
 
-        charge_point_state.clear_remote_start_transaction_id_tags();
         Ok(())
     }
 }

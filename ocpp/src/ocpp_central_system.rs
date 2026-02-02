@@ -11,11 +11,14 @@ use rust_ocpp::v1_6::{
 use rust_ocpp::v2_0_1::messages::{log_status_notification, security_event_notification};
 
 use crate::{
-    ChargePointState, OcppAuthorizationHook, OcppMeterValuesHook, OcppStatusNotificationHook, RequestToSend, builders::{
+    ChargePointState, OcppAuthorizationHook, OcppMeterValuesHook, OcppStatusNotificationHook,
+    RequestToSend,
+    builders::{
         MessageBuilder, change_configuration_builder::ChangeConfigurationBuilder,
         clear_charging_profile_builder::ClearChargingProfileBuilder,
         trigger_message_builder::TriggerMessageBuilder,
-    }, handlers::{
+    },
+    handlers::{
         authorize_handler::handle_authorize_request,
         boot_notification_handler::handle_boot_notification_request,
         change_configuration_handler::handle_change_configuration_response,
@@ -36,7 +39,9 @@ use crate::{
         status_notification_handler::handle_status_notification_request,
         stop_transaction_handler::handle_stop_transaction_request,
         trigger_message_handler::handle_trigger_message_response,
-    }, ocpp_types::*, visitor::Visitor
+    },
+    ocpp_types::*,
+    visitor::Visitor,
 };
 
 use config::config::Config;
@@ -49,7 +54,9 @@ use std::sync::{Arc, Mutex};
 
 //-------------------------------------------------------------------------------------------------
 
-pub struct OCPPCentralSystem<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook> {
+pub struct OCPPCentralSystem<
+    T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook,
+> {
     db_connection: Connection,
     charging_point_ip: String,
     config: Config,
@@ -60,7 +67,9 @@ pub struct OCPPCentralSystem<T: OcppStatusNotificationHook + OcppMeterValuesHook
     ocpp_hooks: Arc<Mutex<T>>,
 }
 
-impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook> OCPPCentralSystem<T> {
+impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook>
+    OCPPCentralSystem<T>
+{
     pub fn new(
         db_connection: Connection,
         charging_point_ip: String,
@@ -231,8 +240,8 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
 
 //-------------------------------------------------------------------------------------------------
 
-impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook> Visitor<Result<String, CustomError>>
-    for OCPPCentralSystem<T>
+impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook>
+    Visitor<Result<String, CustomError>> for OCPPCentralSystem<T>
 {
     fn visit_request_message(
         &mut self,
@@ -243,19 +252,11 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
 
         trace!("Visiting request message: {}", request.json);
 
+        let merged_id_tags: Vec<config::config::IdTag> = self.config.id_tags.clone();
         let response = match request.message_type {
             MessageTypeName::Authorize => {
                 let authorize_request =
                     serde_json::from_value::<authorize::AuthorizeRequest>(request.json)?;
-
-                let mut merged_id_tags: Vec<config::config::IdTag> = self.config.id_tags.clone();
-                merged_id_tags.extend(
-                    charge_point_state
-                        .get_remote_start_transaction_id_tags()
-                        .iter()
-                        .map(|e| config::config::IdTag { id: e.clone() })
-                        .collect::<Vec<_>>(),
-                );
 
                 serde_json::to_value(&handle_authorize_request(
                     &authorize_request,
@@ -334,7 +335,7 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
 
                 serde_json::to_value(&handle_start_transaction_request(
                     &start_transaction_request,
-                    &self.config.id_tags,
+                    &merged_id_tags,
                     &mut charge_point_state,
                 )?)?
             }

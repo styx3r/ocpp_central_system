@@ -69,7 +69,7 @@ mod tests {
             IdTagInfo {
                 expiry_date: None,
                 parent_id_tag: None,
-                status: AuthorizationStatus::Blocked
+                status: AuthorizationStatus::Invalid
             }
         );
 

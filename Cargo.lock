@@ -1297,11 +1297,15 @@ dependencies = [
  "chrono",
  "clap",
  "config",
+ "env_logger",
  "fronius",
  "ftail",
  "log",
  "ocpp",
+ "serde",
+ "serde_json",
  "toml",
+ "tungstenite",
  "uuid",
 ]
 

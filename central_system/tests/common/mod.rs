@@ -1,4 +1,6 @@
+use awattar::awattar_mock::AwattarApiMock;
 use config::config;
+use fronius::FroniusMock;
 use std::{
     net::TcpStream,
     sync::{Arc, Mutex},
@@ -6,35 +8,45 @@ use std::{
 };
 use tungstenite::{WebSocket, connect, stream::MaybeTlsStream};
 
-use crate::Hook;
-
 //-------------------------------------------------------------------------------------------------
 
 pub struct IntegrationTest {
     pub config: config::Config,
     join_handles: Vec<JoinHandle<()>>,
-    hook: Arc<Mutex<Hook>>,
+    pub fronius_mock: Arc<Mutex<FroniusMock>>,
+    pub awattar_mock: Arc<Mutex<AwattarApiMock>>,
 }
 
 //-------------------------------------------------------------------------------------------------
 
 impl IntegrationTest {
-    pub fn new(config: config::Config, hook: Arc<Mutex<Hook>>) -> Self {
+    pub fn new(config: config::Config) -> Self {
         let _ = env_logger::try_init();
         Self {
             config,
             join_handles: vec![],
-            hook,
+            fronius_mock: Arc::new(Mutex::new(FroniusMock::default())),
+            awattar_mock: Arc::new(Mutex::new(AwattarApiMock::default())),
         }
     }
 
     pub fn setup(&mut self) -> WebSocket<MaybeTlsStream<TcpStream>> {
-        let thread_safe_hook = self.hook.clone();
         let config_clone = self.config.clone();
+        let fronius_mock_handle = Arc::clone(&self.fronius_mock);
+        let awattar_mock_handle = Arc::clone(&self.awattar_mock);
 
         self.join_handles.push(spawn(move || {
-            ocpp::run::<Hook>(&config_clone, thread_safe_hook)
-                .expect("OCPP central system could not be started!")
+            let hooks = Arc::new(Mutex::new(ocppcentral_system::hooks::OcppHooks::new(
+                fronius_mock_handle,
+                awattar_mock_handle,
+                config_clone.clone(),
+            )));
+
+            ocpp::run::<ocppcentral_system::hooks::OcppHooks<FroniusMock, AwattarApiMock>>(
+                &config_clone,
+                Arc::clone(&hooks),
+            )
+            .expect("Could not run OCPPCentralSystem");
         }));
 
         let websocket_address = format!(

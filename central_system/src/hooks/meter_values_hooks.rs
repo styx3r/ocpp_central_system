@@ -1,4 +1,6 @@
 use crate::{OcppHooks, hooks::calculate_max_current};
+use awattar::AwattarApi;
+use fronius::FroniusApi;
 use log::info;
 
 use config::config;
@@ -11,7 +13,7 @@ use ocpp::{
 
 //-------------------------------------------------------------------------------------------------
 
-impl ocpp::OcppMeterValuesHook for OcppHooks {
+impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U> {
     fn evaluate(
         &mut self,
         charge_point_state: &mut ChargePointState,
@@ -20,11 +22,12 @@ impl ocpp::OcppMeterValuesHook for OcppHooks {
             && let Some(_latest_power) = charge_point_state.get_latest_power()
             && let Some(_latest_voltage) = charge_point_state.get_latest_voltage()
             && let Some(_latest_cos_phi) = charge_point_state.get_latest_cos_phi()
-            && charge_point_state.get_remote_start_transaction_id_tags().is_empty()
         {
-            let _ = calculate_default_tx_profile(&self.config, charge_point_state);
-            // TODO(styx3r): If transaction is running and SmartCharging is enabled set TxProfile
-            // accordingly.
+            if !charge_point_state.get_smart_charging() {
+                calculate_default_tx_profile(&self.config, charge_point_state)?;
+            } else if charge_point_state.get_smart_charging() {
+                self.calculate_smart_charging_tx_profile(charge_point_state)?;
+            }
         }
 
         Ok(())
@@ -90,9 +93,10 @@ fn calculate_default_tx_profile(
 
 #[cfg(test)]
 mod tests {
-    use fronius::FroniusApi;
+    use fronius::FroniusMock;
     use ocpp::OcppMeterValuesHook;
     use std::sync::{Arc, Mutex};
+    use awattar::awattar_mock::AwattarApiMock;
 
     use super::*;
 
@@ -108,7 +112,8 @@ mod tests {
     #[test]
     fn meter_values_request_empty() -> Result<(), Box<dyn std::error::Error>> {
         let hook = Arc::new(Mutex::new(OcppHooks::new(
-            FroniusApi::default(),
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::new(Mutex::new(AwattarApiMock::default())),
             config::Config {
                 websocket: config::Websocket {
                     ip: "127.0.0.1".to_owned(),
@@ -149,7 +154,8 @@ mod tests {
     #[test]
     fn meter_values_request() -> Result<(), Box<dyn std::error::Error>> {
         let hook = Arc::new(Mutex::new(OcppHooks::new(
-            FroniusApi::default(),
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::new(Mutex::new(AwattarApiMock::default())),
             config::Config {
                 websocket: config::Websocket {
                     ip: "127.0.0.1".to_owned(),
@@ -193,54 +199,6 @@ mod tests {
         );
 
         assert_eq!(charge_point_state.get_max_current(), Some(15.0));
-
-        Ok(())
-    }
-
-    #[test]
-    fn meter_values_request_with_running_remote_transaction() -> Result<(), Box<dyn std::error::Error>> {
-        let hook = Arc::new(Mutex::new(OcppHooks::new(
-            FroniusApi::default(),
-            config::Config {
-                websocket: config::Websocket {
-                    ip: "127.0.0.1".to_owned(),
-                    port: 8080,
-                },
-                charging_point: config::ChargePoint {
-                    serial_number: UNITTEST_CHARGING_POINT_SERIAL.to_owned(),
-                    heartbeat_interval: UNITTEST_HEARTBEAT_INTERVAL,
-                    max_charging_power: UNITTEST_MAX_CHARGING_POWER,
-                    default_system_voltage: UNITTEST_SYSTEM_VOLTAGE,
-                    default_current: UNITTEST_DEFAULT_CURRENT,
-                    default_cos_phi: UNITTEST_COS_PHI,
-                    minimum_charging_current: UNITTEST_MINIMUM_CHARGING_CURRENT,
-                    config_parameters: vec![],
-                },
-                id_tags: vec![],
-                log_directory: "".to_owned(),
-                fronius: config::Fronius {
-                    username: "TEST".into(),
-                    password: "TEST".into(),
-                    url: "127.0.0.1:8081".into(),
-                },
-                awattar: config::Awattar {
-                    base_url: "".to_owned(),
-                },
-                electric_vehicle: config::Ev {
-                    average_watt_hours_needed: 30000,
-                },
-            },
-        )));
-
-        let mut charge_point_state = ChargePointState::new(0.9988504095416009, 6255.9, 9.0, 695.9);
-        charge_point_state.add_remote_transaction_id_tag("TEST_TAG".to_owned());
-
-        hook.lock().unwrap().evaluate(&mut charge_point_state)?;
-
-        let request_to_send = charge_point_state.get_requests_to_send().first();
-
-        assert!(request_to_send.is_none());
-        assert!(charge_point_state.get_max_current().is_none());
 
         Ok(())
     }

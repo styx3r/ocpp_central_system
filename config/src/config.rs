@@ -38,9 +38,10 @@ pub struct ConfigSetting {
     pub value: String,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct IdTag {
     pub id: String,
+    pub smart_charging: bool
 }
 
 #[derive(Deserialize, Debug, Clone)]

@@ -1,93 +1,124 @@
 mod api_types;
+pub mod awattar_mock;
 
 pub(crate) use api_types::MarketData;
-use chrono::Local;
+use chrono::{DateTime, Local};
 use config::config;
 
 use log::info;
 
 //-------------------------------------------------------------------------------------------------
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Period {
     pub start_timestamp: i64,
     pub end_timestamp: i64,
     pub average_price: f64,
 }
 
+pub trait AwattarApi {
+    fn update_price_chart(
+        &self,
+        config: &config::Config,
+    ) -> Result<Period, Box<dyn std::error::Error>>;
+}
+
+#[derive(Default)]
+pub struct AwattarApiAdapter {}
+
 //-------------------------------------------------------------------------------------------------
 
-pub fn update_price_chart(config: &config::Config) -> Result<Period, Box<dyn std::error::Error>> {
-    let response = reqwest::blocking::Client::new()
-        .get(format!(
-            "{}?start={}",
-            &config.awattar.base_url,
-            Local::now().timestamp_millis()
-        ))
-        .send()?;
+impl AwattarApi for AwattarApiAdapter {
+    fn update_price_chart(
+        &self,
+        config: &config::Config,
+    ) -> Result<Period, Box<dyn std::error::Error>> {
+        let response = reqwest::blocking::Client::new()
+            .get(format!(
+                "{}?start={}",
+                &config.awattar.base_url,
+                Local::now().timestamp_millis()
+            ))
+            .send()?;
 
-    let market_data = parse_api_response(response.text()?.as_str())?;
+        let market_data = self.parse_api_response(response.text()?.as_str())?;
 
-    match find_cheapest_period(&market_data, &config) {
-        Some(cheapest_period) => Ok(cheapest_period),
-        _ => Err("Could not calculate cheapest period".into()),
+        match self.calculate_cheapest_period_with_moving_window(&market_data, &config) {
+            Some(cheapest_period) => Ok(cheapest_period),
+            _ => Err("Could not calculate cheapest period".into()),
+        }
     }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-fn parse_api_response(response: &str) -> Result<MarketData, Box<dyn std::error::Error>> {
-    Ok(serde_json::from_str::<MarketData>(response)?)
-}
-
-//-------------------------------------------------------------------------------------------------
-
-fn find_cheapest_period(market_data: &MarketData, config: &config::Config) -> Option<Period> {
-    let window_size = (config.electric_vehicle.average_watt_hours_needed as f64
-        / config.charging_point.max_charging_power.ceil()) as usize;
-    let sliding_windows_average = market_data
-        .data
-        .windows(window_size)
-        .map(|e| {
-            e.iter()
-                .map(|e| e.marketprice)
-                .collect::<Vec<f64>>()
-                .iter()
-                .sum::<f64>()
-                / e.len() as f64
-        })
-        .collect::<Vec<f64>>();
-
-    let sliding_window_min = sliding_windows_average
-        .clone()
-        .into_iter()
-        .reduce(f64::min)
-        .unwrap_or(0.0);
-
-    let sliding_window_index = sliding_windows_average
-        .iter()
-        .position(|&e| e == sliding_window_min)
-        .unwrap();
-
-    let market_data_window =
-        &market_data.data[sliding_window_index..sliding_window_index + window_size];
-
-    if let Some(period_start) = market_data_window.first()
-        && let Some(period_end) = market_data_window.last()
-    {
-        info!(
-            "Found cheapest period starting at {} and ending at {} with {:.2} c/kWh",
-            period_start.start_timestamp, period_end.end_timestamp, sliding_window_min / 10.0
-        );
-
-        return Some(Period {
-            start_timestamp: period_start.start_timestamp,
-            end_timestamp: period_end.end_timestamp,
-            average_price: sliding_window_min,
-        });
+impl AwattarApiAdapter {
+    fn parse_api_response(&self, response: &str) -> Result<MarketData, Box<dyn std::error::Error>> {
+        Ok(serde_json::from_str::<MarketData>(response)?)
     }
 
-    None
+    fn calculate_cheapest_period_with_moving_window(
+        &self,
+        market_data: &MarketData,
+        config: &config::Config,
+    ) -> Option<Period> {
+        let window_size = (config.electric_vehicle.average_watt_hours_needed as f64
+            / config.charging_point.max_charging_power.ceil()) as usize;
+        let sliding_windows_average = market_data
+            .data
+            .windows(window_size)
+            .map(|e| {
+                e.iter()
+                    .map(|e| e.marketprice)
+                    .collect::<Vec<f64>>()
+                    .iter()
+                    .sum::<f64>()
+                    / e.len() as f64
+            })
+            .collect::<Vec<f64>>();
+
+        let sliding_window_min = sliding_windows_average
+            .clone()
+            .into_iter()
+            .reduce(f64::min)
+            .unwrap_or(0.0);
+
+        let sliding_window_index = sliding_windows_average
+            .iter()
+            .position(|&e| e == sliding_window_min)
+            .unwrap();
+
+        let market_data_window =
+            &market_data.data[sliding_window_index..sliding_window_index + window_size];
+
+        if let Some(period_start) = market_data_window.first()
+            && let Some(period_end) = market_data_window.last()
+        {
+            let local_start: DateTime<Local> = DateTime::from(
+                DateTime::from_timestamp_millis(period_start.start_timestamp)
+                    .unwrap_or(DateTime::default()),
+            );
+            let local_end: DateTime<Local> = DateTime::from(
+                DateTime::from_timestamp_millis(period_end.end_timestamp)
+                    .unwrap_or(DateTime::default()),
+            );
+
+            info!(
+                "Found cheapest period starting at {} and ending at {} with {:.2} c/kWh",
+                local_start.to_rfc3339(),
+                local_end.to_rfc3339(),
+                sliding_window_min / 10.0
+            );
+
+            return Some(Period {
+                start_timestamp: period_start.start_timestamp,
+                end_timestamp: period_end.end_timestamp,
+                average_price: sliding_window_min,
+            });
+        }
+
+        None
+    }
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -244,7 +275,8 @@ mod tests {
 
     #[test]
     fn parse_valid_api_response() -> Result<(), Box<dyn std::error::Error>> {
-        let parsed_response = parse_api_response(API_RESPONSE)?;
+        let awattar_api_connector = AwattarApiAdapter::default();
+        let parsed_response = awattar_api_connector.parse_api_response(API_RESPONSE)?;
 
         assert_eq!(parsed_response.object, "list");
         assert_eq!(
@@ -271,7 +303,8 @@ mod tests {
 
     #[test]
     fn cheapest_period_for_six_kilowatt() -> Result<(), Box<dyn std::error::Error>> {
-        let parsed_response = parse_api_response(API_RESPONSE)?;
+        let awattar_api_connector = AwattarApiAdapter::default();
+        let parsed_response = awattar_api_connector.parse_api_response(API_RESPONSE)?;
 
         let config = config::Config {
             websocket: config::Websocket {
@@ -303,7 +336,8 @@ mod tests {
             },
         };
 
-        let cheapest_period = find_cheapest_period(&parsed_response, &config);
+        let cheapest_period = awattar_api_connector
+            .calculate_cheapest_period_with_moving_window(&parsed_response, &config);
 
         assert_eq!(
             cheapest_period,

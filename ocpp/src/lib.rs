@@ -6,6 +6,7 @@ mod visitor;
 
 use log::{debug, error, info};
 use rusqlite::{Connection, Result};
+use rust_ocpp::v1_6::types::ChargingProfile;
 use std::process::exit;
 use std::{error::Error, net::TcpListener};
 use tungstenite::{Utf8Bytes, accept};
@@ -90,6 +91,9 @@ pub struct ChargePointState {
     running_transactions: Vec<Transaction>,
 
     remote_start_transaction_id_tags: Vec<String>,
+
+    smart_charging: bool,
+    smart_charging_profile: Option<ChargingProfile>
 }
 
 impl ChargePointState {
@@ -104,6 +108,8 @@ impl ChargePointState {
             requests_awaiting_confirmation: vec![],
             running_transactions: vec![],
             remote_start_transaction_id_tags: vec![],
+            smart_charging: false,
+            smart_charging_profile: None
         }
     }
 
@@ -139,6 +145,14 @@ impl ChargePointState {
         &self.running_transactions
     }
 
+    pub fn get_smart_charging(&self) -> bool {
+        self.smart_charging
+    }
+
+    pub fn get_smart_charging_profile(&self) -> &Option<ChargingProfile> {
+        &self.smart_charging_profile
+    }
+
     pub fn set_latest_cos_phi(&mut self, cos_phi: f64) {
         self.latest_cos_phi = Some(cos_phi);
     }
@@ -157,6 +171,19 @@ impl ChargePointState {
 
     pub fn clear_remote_start_transaction_id_tags(&mut self) {
         self.remote_start_transaction_id_tags.clear();
+    }
+
+    pub fn enable_smart_charging(&mut self) {
+        self.smart_charging = true;
+    }
+
+    pub fn disable_smart_charging(&mut self) {
+        self.smart_charging = false;
+        self.smart_charging_profile = None;
+    }
+
+    pub fn set_smart_charging_profile(&mut self, smart_charging_profile: &ChargingProfile) {
+        self.smart_charging_profile = Some(smart_charging_profile.clone());
     }
 }
 

@@ -57,6 +57,7 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
     if let Some(latest_current) = charge_point_state.latest_current
             && let Some(latest_power) = charge_point_state.latest_power
             && let Some(latest_voltage) = charge_point_state.latest_voltage
+            && latest_power != 0.0 && latest_voltage != 0.0 && latest_current != 0.0
     {
         charge_point_state.latest_cos_phi = Some(latest_power / (latest_voltage * latest_current));
 

@@ -1,5 +1,6 @@
 mod api_types;
 mod digest_auth;
+mod fronius_mock;
 
 use api_types::*;
 use config::config::Fronius;
@@ -13,6 +14,8 @@ use reqwest::{
 };
 
 use std::time::Duration;
+
+pub use fronius_mock::FroniusMock;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -29,14 +32,25 @@ static TIME_TABLE_FORMAT: &str = "%H:%M";
 
 //-------------------------------------------------------------------------------------------------
 
-pub struct FroniusApi {
+pub trait FroniusApi {
+    fn block_battery_for_duration(
+        &mut self,
+        duration_to_block: &Duration,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+
+    fn fully_unblock_battery(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+//-------------------------------------------------------------------------------------------------
+
+pub struct FroniusApiAdapter {
     digest_auth: DigestAuth,
     fronius_config: Fronius,
 }
 
 //-------------------------------------------------------------------------------------------------
 
-impl FroniusApi {
+impl FroniusApiAdapter {
     pub fn default() -> Self {
         Self {
             digest_auth: DigestAuth::new(&"".to_owned(), &"".to_owned()),
@@ -48,15 +62,15 @@ impl FroniusApi {
         }
     }
 
-    pub fn new(fronius_config: &Fronius) -> Self {
+    pub fn new(fronius_config: &Fronius) -> Result<Self, Box<dyn std::error::Error>> {
         let self_ = Self {
             digest_auth: DigestAuth::new(&fronius_config.username, &fronius_config.password),
             fronius_config: fronius_config.clone(),
         };
 
         match self_.check_firmware_version() {
-            Ok(_) => self_,
-            Err(e) => panic!("{}", e),
+            Ok(_) => Ok(self_),
+            Err(e) => Err(e),
         }
     }
 
@@ -108,8 +122,10 @@ impl FroniusApi {
             Err("Login failed".into())
         }
     }
+}
 
-    pub fn block_battery_for_duration(
+impl FroniusApi for FroniusApiAdapter {
+    fn block_battery_for_duration(
         &mut self,
         duration_to_block: &Duration,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -193,7 +209,7 @@ impl FroniusApi {
         Ok(())
     }
 
-    pub fn fully_unblock_battery(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn fully_unblock_battery(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.login()?;
 
         let empty_time_of_use = TimesOfUse {
