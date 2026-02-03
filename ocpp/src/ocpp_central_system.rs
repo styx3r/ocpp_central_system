@@ -5,7 +5,9 @@ use rust_ocpp::v1_6::{
         meter_values, remote_start_transaction, remote_stop_transaction, set_charging_profile,
         start_transaction, status_notification, stop_transaction, trigger_message,
     },
-    types::MessageTrigger,
+    types::{
+        ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType, MessageTrigger,
+    },
 };
 
 use rust_ocpp::v2_0_1::messages::{log_status_notification, security_event_notification};
@@ -15,6 +17,7 @@ use crate::{
     RequestToSend,
     builders::{
         MessageBuilder, change_configuration_builder::ChangeConfigurationBuilder,
+        charging_profile_builder::ChargingProfileBuilder,
         clear_charging_profile_builder::ClearChargingProfileBuilder,
         trigger_message_builder::TriggerMessageBuilder,
     },
@@ -41,8 +44,11 @@ use crate::{
         trigger_message_handler::handle_trigger_message_response,
     },
     ocpp_types::*,
+    set_charging_profile_builder::SetChargingProfileBuilder,
     visitor::Visitor,
 };
+
+use rust_decimal::Decimal;
 
 use config::config::Config;
 use log::{info, trace};
@@ -168,6 +174,37 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
                 payload: change_config_parameter_request,
             });
         }
+
+        static CHARGE_POINT_MAX_PROFILE: i32 = 3;
+        static CONNECTOR_ID: i32 = 0;
+
+        let charging_profile = ChargingProfileBuilder::new(
+            CHARGE_POINT_MAX_PROFILE,
+            ChargingProfilePurposeType::ChargePointMaxProfile,
+            ChargingProfileKindType::Absolute,
+            ChargingRateUnitType::A,
+        )
+        .add_charging_schedule_period(
+            0,
+            Decimal::from_f64_retain(self.config.charging_point.default_current)
+                .ok_or(CustomError::Common(
+                    "Could not convert to Decimal!".to_owned(),
+                ))?
+                .round_dp(1),
+            None,
+        )
+        .get();
+
+        let (uuid, set_charging_profile_request) =
+            SetChargingProfileBuilder::new(CONNECTOR_ID, charging_profile)
+                .build()
+                .serialize()?;
+
+        charge_point_state.add_request_to_send(RequestToSend {
+            uuid: uuid.clone(),
+            message_type: MessageTypeName::SetChargingProfile,
+            payload: set_charging_profile_request,
+        });
 
         let (uuid, clear_charging_profile_request) =
             ClearChargingProfileBuilder::default().build().serialize()?;

@@ -93,7 +93,7 @@ pub struct ChargePointState {
     remote_start_transaction_id_tags: Vec<String>,
 
     smart_charging: bool,
-    smart_charging_profile: Option<ChargingProfile>
+    grid_based_smart_charging_profile: Option<ChargingProfile>,
 }
 
 impl ChargePointState {
@@ -109,7 +109,7 @@ impl ChargePointState {
             running_transactions: vec![],
             remote_start_transaction_id_tags: vec![],
             smart_charging: false,
-            smart_charging_profile: None
+            grid_based_smart_charging_profile: None,
         }
     }
 
@@ -149,8 +149,8 @@ impl ChargePointState {
         self.smart_charging
     }
 
-    pub fn get_smart_charging_profile(&self) -> &Option<ChargingProfile> {
-        &self.smart_charging_profile
+    pub fn get_grid_based_smart_charging_profile(&self) -> &Option<ChargingProfile> {
+        &self.grid_based_smart_charging_profile
     }
 
     pub fn set_latest_cos_phi(&mut self, cos_phi: f64) {
@@ -179,11 +179,14 @@ impl ChargePointState {
 
     pub fn disable_smart_charging(&mut self) {
         self.smart_charging = false;
-        self.smart_charging_profile = None;
+        self.grid_based_smart_charging_profile = None;
     }
 
-    pub fn set_smart_charging_profile(&mut self, smart_charging_profile: &ChargingProfile) {
-        self.smart_charging_profile = Some(smart_charging_profile.clone());
+    pub fn set_grid_based_smart_charging_profile(
+        &mut self,
+        grid_based_smart_charging_profile: &ChargingProfile,
+    ) {
+        self.grid_based_smart_charging_profile = Some(grid_based_smart_charging_profile.clone());
     }
 }
 
