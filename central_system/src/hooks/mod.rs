@@ -37,7 +37,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         }
     }
 
-    pub fn calculate_smart_charging_tx_profile(
+    pub fn calculate_grid_based_smart_charging_tx_profile(
         &self,
         charge_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -46,16 +46,17 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             "Could not convert max_current to Decimal!".to_owned(),
         ))?;
 
-        let charging_profile = if let Some(smart_charging_profile) =
-            charge_point_state.get_smart_charging_profile()
+        let grid_based_charging_profile = if let Some(grid_based_smart_charging_profile) =
+            charge_point_state.get_grid_based_smart_charging_profile()
         {
-            let mut smart_charging_profile_handle = smart_charging_profile.clone();
-            smart_charging_profile_handle
+            let mut grid_based_smart_charging_profile_handle = grid_based_smart_charging_profile.clone();
+            grid_based_smart_charging_profile_handle
                 .charging_schedule
-                .charging_schedule_period[1]
+                .charging_schedule_period[1] // NOTE: This RELIES on the fact that the second
+                                             // charging schedule period is the cheapest_period
                 .limit = limit;
 
-            smart_charging_profile_handle
+            grid_based_smart_charging_profile_handle
         } else {
             let cheapest_period = self
                 .awattar_api
@@ -91,12 +92,12 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             charging_profile
         };
 
-        charge_point_state.set_smart_charging_profile(&charging_profile);
+        charge_point_state.set_grid_based_smart_charging_profile(&grid_based_charging_profile);
         charge_point_state.set_max_current(max_current);
         charge_point_state.enable_smart_charging();
 
         let (uuid, set_charging_profile_request) =
-            SetChargingProfileBuilder::new(CONNECTOR_ID, charging_profile)
+            SetChargingProfileBuilder::new(CONNECTOR_ID, grid_based_charging_profile)
                 .build()
                 .serialize()?;
 

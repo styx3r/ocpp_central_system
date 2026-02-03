@@ -50,17 +50,14 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
             .iter()
             .find(|id_tag| id_tag.id == authorization_request.id_tag);
 
-        if id_tag.is_none() {
+        if id_tag.is_none() || !id_tag.unwrap().smart_charging {
             return Ok(());
         }
 
-        let smart_charging = id_tag.unwrap().smart_charging;
-        if smart_charging {
-            if !charge_point_state.get_running_transaction_ids().is_empty() {
-                clear_smart_charging_tx_charging_profile(charge_point_state)?;
-            }
+        if !charge_point_state.get_running_transaction_ids().is_empty() {
+            clear_smart_charging_tx_charging_profile(charge_point_state)?;
         } else {
-            self.calculate_smart_charging_tx_profile(charge_point_state)?;
+            self.calculate_grid_based_smart_charging_tx_profile(charge_point_state)?;
         }
 
         Ok(())

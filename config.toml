@@ -14,6 +14,11 @@ average_watt_hours_needed = 30000
 
 [[id_tags]]
 id = ""
+smart_charging = false
+
+[[id_tags]]
+id = ""
+smart_charging = true
 
 [websocket]
 ip = "0.0.0.0"

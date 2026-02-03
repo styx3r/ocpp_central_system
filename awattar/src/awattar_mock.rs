@@ -3,16 +3,14 @@ use crate::AwattarApi;
 //-------------------------------------------------------------------------------------------------
 
 pub struct AwattarApiMock {
-    period: Option<crate::Period>
+    period: Option<crate::Period>,
 }
 
 //-------------------------------------------------------------------------------------------------
 
 impl AwattarApiMock {
     pub fn default() -> Self {
-        Self {
-            period: None
-        }
+        Self { period: None }
     }
 
     pub fn set_response(&mut self, period_response: crate::Period) {
@@ -24,9 +22,9 @@ impl AwattarApiMock {
 
 impl AwattarApi for AwattarApiMock {
     fn update_price_chart(
-            &self,
-            _config: &config::config::Config,
-        ) -> Result<crate::Period, Box<dyn std::error::Error>> {
-       Ok(self.period.clone().unwrap())
+        &self,
+        _config: &config::config::Config,
+    ) -> Result<crate::Period, Box<dyn std::error::Error>> {
+        Ok(self.period.clone().unwrap())
     }
 }

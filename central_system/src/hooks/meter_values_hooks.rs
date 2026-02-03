@@ -26,7 +26,7 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
             if !charge_point_state.get_smart_charging() {
                 calculate_default_tx_profile(&self.config, charge_point_state)?;
             } else if charge_point_state.get_smart_charging() {
-                self.calculate_smart_charging_tx_profile(charge_point_state)?;
+                self.calculate_grid_based_smart_charging_tx_profile(charge_point_state)?;
             }
         }
 

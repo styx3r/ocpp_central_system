@@ -3,13 +3,25 @@ mod common;
 use std::error::Error;
 use std::net::TcpStream;
 
+use awattar::Period;
+use chrono::{Duration, TimeDelta, Utc};
 use config::config;
 
+use ::config::config::IdTag;
+use ocpp::Decimal;
 use serde::Deserialize;
 use serde_json::json;
 use tungstenite::{WebSocket, stream::MaybeTlsStream};
 
 use uuid::Uuid;
+
+use rust_ocpp::v1_6::{
+    messages::set_charging_profile::SetChargingProfileRequest,
+    types::{
+        ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType,
+        ChargingSchedulePeriod,
+    },
+};
 
 //-------------------------------------------------------------------------------------------------
 
@@ -67,6 +79,12 @@ fn validate_initial_messages(
             uuid: "".to_owned(),
             message_type: "ClearChargingProfile".to_owned(),
             json: json!({}),
+        },
+        ExpectedJSONRequestFormat {
+            message_id: 2,
+            uuid: "".to_owned(),
+            message_type: "SetChargingProfile".to_owned(),
+            json: json!({"connectorId":0,"csChargingProfiles":{"chargingProfileId":3,"chargingProfileKind":"Absolute","chargingProfilePurpose":"ChargePointMaxProfile","chargingSchedule":{"chargingRateUnit":"A","chargingSchedulePeriod":[{"limit":16,"startPeriod":0}]},"stackLevel":0}}),
         },
         ExpectedJSONRequestFormat {
             message_id: 2,
@@ -358,7 +376,7 @@ fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
         },
         id_tags: vec![config::IdTag {
             id: "VALID_ID_TAG".to_string(),
-            smart_charging: false
+            smart_charging: false,
         }],
         log_directory: log_directory.to_owned(),
         fronius: config::Fronius {
@@ -775,6 +793,397 @@ fn suspendedev_status_notification() -> Result<(), Box<dyn Error>> {
             .unwrap()
             .unblock_battery_called
     );
+    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    Ok(())
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#[test]
+fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
+    static GRID_BASED_SMART_CHARGING_ID: &str = "GRID_BASED_SMART_CHARGING";
+    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
+    let config = config::Config {
+        websocket: config::Websocket {
+            ip: "127.0.0.1".to_owned(),
+            port: 8090,
+        },
+        charging_point: config::ChargePoint {
+            serial_number: "".to_owned(),
+            heartbeat_interval: 60,
+            max_charging_power: 11000.0,
+            default_system_voltage: 696.0,
+            default_current: 16.0,
+            default_cos_phi: 0.86,
+            minimum_charging_current: 6.0,
+            config_parameters: vec![],
+        },
+        id_tags: vec![IdTag {
+            id: GRID_BASED_SMART_CHARGING_ID.to_owned(),
+            smart_charging: true,
+        }],
+        log_directory: log_directory.to_owned(),
+        fronius: config::Fronius {
+            username: "TEST".into(),
+            password: "TEST".into(),
+            url: "127.0.0.1:8081".into(),
+        },
+        awattar: config::Awattar {
+            base_url: "".to_owned(),
+        },
+        electric_vehicle: config::Ev {
+            average_watt_hours_needed: 0,
+        },
+    };
+
+    let mut integration_test = common::IntegrationTest::new(config);
+
+    let mut websocket = integration_test.setup();
+    validate_initial_messages(&mut websocket)?;
+
+    let now = Utc::now();
+    let start_timestamp = now + Duration::hours(1);
+    let end_timestamp = now + Duration::hours(5);
+
+    {
+        let handle = integration_test.awattar_mock.clone();
+        let mut guard = handle.lock().unwrap();
+        guard.set_response(Period {
+            start_timestamp: start_timestamp.timestamp_millis(),
+            end_timestamp: end_timestamp.timestamp_millis(),
+            average_price: 20.0,
+        });
+    }
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"Authorize\",{}]",
+        json!({"idTag": GRID_BASED_SMART_CHARGING_ID})
+    )))?;
+
+    let response_message = websocket.read()?;
+    match serde_json::from_str::<ExpectedJSONResponseFormat>(response_message.to_text()?) {
+        Ok(response) => {
+            assert_eq!(response.message_id, 3);
+            assert_eq!(response.uuid, "12345");
+            assert_eq!(
+                response.json,
+                json!({ "idTagInfo": { "status": "Accepted" }})
+            );
+        }
+        _ => assert!(false),
+    }
+
+    let set_charging_profile_message = websocket.read()?;
+    match serde_json::from_str::<ExpectedJSONRequestFormat>(set_charging_profile_message.to_text()?)
+    {
+        Ok(response) => {
+            assert_eq!(response.message_id, 2);
+            assert_eq!(response.message_type, "SetChargingProfile");
+
+            let set_charging_profile_request =
+                serde_json::from_value::<SetChargingProfileRequest>(response.json)?;
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_id,
+                2
+            );
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_purpose,
+                ChargingProfilePurposeType::TxProfile
+            );
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_kind,
+                ChargingProfileKindType::Absolute
+            );
+
+            assert!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_from
+                    .is_some()
+            );
+
+            assert!(
+                (set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_from
+                    .unwrap()
+                    - now)
+                    .abs()
+                    <= TimeDelta::milliseconds(100)
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_to
+                    .unwrap()
+                    .timestamp_millis(),
+                end_timestamp.timestamp_millis()
+            );
+
+            assert!(
+                (Duration::seconds(
+                    set_charging_profile_request
+                        .cs_charging_profiles
+                        .charging_schedule
+                        .duration
+                        .unwrap() as i64
+                ) - Duration::hours(5))
+                .abs()
+                    <= TimeDelta::seconds(1)
+            );
+
+            assert!(
+                (set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .start_schedule
+                    .unwrap()
+                    - now)
+                    .abs()
+                    <= TimeDelta::milliseconds(100)
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .charging_rate_unit,
+                ChargingRateUnitType::A
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .charging_schedule_period,
+                vec![
+                    ChargingSchedulePeriod {
+                        start_period: 0,
+                        limit: Decimal::new(0, 0),
+                        number_phases: None
+                    },
+                    ChargingSchedulePeriod {
+                        start_period: ((start_timestamp - now).num_seconds() - 1) as i32,
+                        limit: Decimal::new(16, 0),
+                        number_phases: None
+                    },
+                ]
+            );
+            websocket.send(tungstenite::Message::text(format!(
+                "[3,\"{}\",{{\"status\": \"Accepted\"}}]",
+                response.uuid
+            )))?;
+        }
+        _ => assert!(false),
+    }
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"StartTransaction\",{}]",
+        json!({
+            "connectorId": 1,
+            "idTag": GRID_BASED_SMART_CHARGING_ID,
+            "meterStart": 0,
+            "timestamp": "2026-01-18T14:09:24Z"
+        })
+    )))?;
+
+    let start_transaction_response = websocket.read()?;
+    match serde_json::from_str::<ExpectedJSONResponseFormat>(start_transaction_response.to_text()?)
+    {
+        Ok(response) => {
+            assert_eq!(response.message_id, 3);
+            assert_eq!(
+                response.json,
+                json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1})
+            );
+        }
+        _ => assert!(false),
+    }
+
+    static METER_VALUES_REQUEST: &str = r#"{
+        "connectorId": 1,
+        "transactionId": 1,
+        "meterValue": [
+        {
+            "timestamp": "2026-01-26T05:06:21Z",
+            "sampledValue": [
+                {
+                    "value": "219",
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Voltage",
+                    "phase": "L1",
+                    "location": "Outlet",
+                    "unit": "V"
+                },
+                {
+                    "value": "219",
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Voltage",
+                    "phase": "L2",
+                    "location": "Outlet",
+                    "unit": "V"
+                },
+                {
+                    "value": "219",
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Voltage",
+                    "phase": "L3",
+                    "location": "Outlet",
+                    "unit": "V"
+                },
+                {
+                    "value": "11000",
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Power.Offered",
+                    "location": "Outlet",
+                    "unit": "kW"
+                },
+                {
+                    "value": "16",
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Current.Offered",
+                    "location": "Outlet",
+                    "unit": "A"
+                }
+            ]
+        } ]
+    }"#;
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"MeterValues\",{}]",
+        METER_VALUES_REQUEST
+    )))?;
+
+    let message = websocket.read()?;
+    match serde_json::from_str::<ExpectedJSONResponseFormat>(message.to_text()?) {
+        Ok(response) => {
+            assert_eq!(response.message_id, 3);
+            assert_eq!(response.uuid, "12345");
+            assert_eq!(response.json, json!({}));
+        }
+        _ => assert!(false),
+    }
+
+    let set_grid_based_smart_charging_profile_message = websocket.read()?;
+    match serde_json::from_str::<ExpectedJSONRequestFormat>(
+        set_grid_based_smart_charging_profile_message.to_text()?,
+    ) {
+        Ok(response) => {
+            assert_eq!(response.message_id, 2);
+            assert_eq!(response.message_type, "SetChargingProfile");
+
+            let set_charging_profile_request =
+                serde_json::from_value::<SetChargingProfileRequest>(response.json)?;
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_id,
+                2
+            );
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_purpose,
+                ChargingProfilePurposeType::TxProfile
+            );
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_kind,
+                ChargingProfileKindType::Absolute
+            );
+
+            assert!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_from
+                    .is_some()
+            );
+
+            assert!(
+                (set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_from
+                    .unwrap()
+                    - now)
+                    .abs()
+                    <= TimeDelta::milliseconds(100)
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_to
+                    .unwrap()
+                    .timestamp_millis(),
+                end_timestamp.timestamp_millis()
+            );
+
+            assert!(
+                (Duration::seconds(
+                    set_charging_profile_request
+                        .cs_charging_profiles
+                        .charging_schedule
+                        .duration
+                        .unwrap() as i64
+                ) - Duration::hours(5))
+                .abs()
+                    <= TimeDelta::seconds(1)
+            );
+
+            assert!(
+                (set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .start_schedule
+                    .unwrap()
+                    - now)
+                    .abs()
+                    <= TimeDelta::milliseconds(100)
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .charging_rate_unit,
+                ChargingRateUnitType::A
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .charging_schedule_period,
+                vec![
+                    ChargingSchedulePeriod {
+                        start_period: 0,
+                        limit: Decimal::new(0, 0),
+                        number_phases: None
+                    },
+                    ChargingSchedulePeriod {
+                        start_period: ((start_timestamp - now).num_seconds() - 1) as i32,
+                        limit: Decimal::new(6, 0),
+                        number_phases: None
+                    },
+                ]
+            );
+        }
+        _ => assert!(false),
+    }
+
     integration_test.teardown(log_directory.as_str(), &mut websocket);
     Ok(())
 }
