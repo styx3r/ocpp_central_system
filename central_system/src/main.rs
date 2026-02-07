@@ -77,11 +77,11 @@ impl log::Log for TraceLogger {
 
         writeln!(
             file,
-            "{} {:<5} | {} {}",
+            "[{} | {:<5} | {}] | {}",
             time,
             record.level(),
-            record.args(),
-            record.target()
+            record.target(),
+            record.args()
         )
         .expect("Could not write to trace log!");
 

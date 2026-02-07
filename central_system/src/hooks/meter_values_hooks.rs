@@ -3,6 +3,10 @@ use awattar::AwattarApi;
 use fronius::FroniusApi;
 use log::info;
 
+use std::sync::{Arc, Mutex};
+
+use chrono::Duration;
+
 use config::config;
 use ocpp::{
     ChargePointState, ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType,
@@ -16,21 +20,82 @@ use ocpp::{
 impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U> {
     fn evaluate(
         &mut self,
-        charge_point_state: &mut ChargePointState,
+        charging_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(_latest_current) = charge_point_state.get_latest_current()
-            && let Some(_latest_power) = charge_point_state.get_latest_power()
-            && let Some(_latest_voltage) = charge_point_state.get_latest_voltage()
-            && let Some(_latest_cos_phi) = charge_point_state.get_latest_cos_phi()
+        calculate_power_flow_realtime_data(
+            &self.config,
+            charging_point_state,
+            Arc::clone(&self.fronius_api),
+        );
+
+        if let Some(_) = charging_point_state.get_latest_current()
+            && let Some(_) = charging_point_state.get_latest_power()
+            && let Some(_) = charging_point_state.get_latest_voltage()
+            && let Some(_) = charging_point_state.get_latest_cos_phi()
         {
-            if !charge_point_state.get_smart_charging() {
-                calculate_default_tx_profile(&self.config, charge_point_state)?;
-            } else if charge_point_state.get_smart_charging() {
-                self.calculate_grid_based_smart_charging_tx_profile(charge_point_state)?;
+            if !charging_point_state.get_smart_charging() {
+                calculate_default_tx_profile(&self.config, charging_point_state)?;
+            } else if charging_point_state.get_smart_charging() {
+                self.calculate_grid_based_smart_charging_tx_profile(charging_point_state)?;
             }
         }
 
         Ok(())
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+fn calculate_power_flow_realtime_data<T: FroniusApi>(
+    config: &config::Config,
+    charging_point_state: &mut ChargePointState,
+    fronius_api: Arc<Mutex<T>>,
+) {
+    if let Ok(powerflow_realtime_data) = fronius_api.lock().unwrap().get_power_flow_realtime_data()
+    {
+        let site_powerflow_realtime_data = powerflow_realtime_data.body.data.site;
+
+        if let Some(power_pv) = site_powerflow_realtime_data.p_pv
+            && let Some(power_load) = site_powerflow_realtime_data.p_load
+            && let Some(power_akku) = site_powerflow_realtime_data.p_akku
+        {
+            let overproduction = if power_akku < 0.0 {
+                power_pv + power_load + power_akku
+            } else {
+                power_pv + power_load
+            };
+
+            info!("Current PV overproduction {}W", overproduction);
+
+            charging_point_state.add_pv_overproduction(overproduction);
+        }
+
+        let threshold = Duration::minutes(15);
+        let expected_vector_size = (threshold.as_seconds_f64()
+            / config.charging_point.heartbeat_interval as f64)
+            .ceil() as usize;
+
+        let pv_overproduction = charging_point_state.get_pv_overproduction();
+        if pv_overproduction.len() == expected_vector_size {
+            let pv_overproduction_average =
+                pv_overproduction.iter().sum::<f64>() / pv_overproduction.len() as f64;
+
+            info!(
+                "PV overproduction in the last {}: {}",
+                threshold, pv_overproduction_average
+            );
+
+            if let Some(latest_cos_phi) = charging_point_state.get_latest_cos_phi()
+                && let Some(latest_voltage) = charging_point_state.get_latest_voltage()
+            {
+                info!(
+                    "Resulting in {}A charging current",
+                    pv_overproduction_average / (latest_cos_phi * latest_voltage)
+                );
+            }
+
+            charging_point_state.remove_first_element_pv_overproduction();
+        }
     }
 }
 
@@ -93,10 +158,17 @@ fn calculate_default_tx_profile(
 
 #[cfg(test)]
 mod tests {
-    use fronius::FroniusMock;
-    use ocpp::OcppMeterValuesHook;
-    use std::sync::{Arc, Mutex};
     use awattar::awattar_mock::AwattarApiMock;
+    use chrono::Utc;
+    use fronius::{
+        Data, FroniusMock, PowerFlowRealtimeData, PowerFlowRealtimeDataBody,
+        PowerFlowRealtimeDataHeader, Site, Smartloads, Status,
+    };
+    use ocpp::OcppMeterValuesHook;
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
 
     use super::*;
 
@@ -108,6 +180,46 @@ mod tests {
     static UNITTEST_DEFAULT_CURRENT: f64 = 16.0;
     static UNITTEST_COS_PHI: f64 = 0.86;
     static UNITTEST_MINIMUM_CHARGING_CURRENT: f64 = 6.0;
+
+    fn default_powerflow_realtime_data() -> PowerFlowRealtimeData {
+        PowerFlowRealtimeData {
+            body: PowerFlowRealtimeDataBody {
+                data: Data {
+                    inverters: HashMap::default(),
+                    site: Site {
+                        mode: String::default(),
+                        battery_standby: false,
+                        backup_mode: false,
+                        p_grid: None,
+                        p_load: None,
+                        p_akku: None,
+                        p_pv: None,
+                        rel_self_consumption: None,
+                        rel_autonomy: None,
+                        meter_location: String::default(),
+                        e_day: None,
+                        e_year: None,
+                        e_total: None,
+                    },
+                    smartloads: Smartloads {
+                        ohmpilots: HashMap::default(),
+                        ohmpilot_ecos: HashMap::default(),
+                    },
+                    secondart_meters: HashMap::default(),
+                    version: String::default(),
+                },
+            },
+            head: PowerFlowRealtimeDataHeader {
+                request_arguments: HashMap::default(),
+                status: Status {
+                    code: 0,
+                    reason: String::default(),
+                    user_message: String::default(),
+                },
+                timestamp: Utc::now(),
+            },
+        }
+    }
 
     #[test]
     fn meter_values_request_empty() -> Result<(), Box<dyn std::error::Error>> {
@@ -144,6 +256,13 @@ mod tests {
                 },
             },
         )));
+
+        hook.lock()
+            .unwrap()
+            .fronius_api
+            .lock()
+            .unwrap()
+            .power_flow_realtime_data = Some(default_powerflow_realtime_data());
 
         let mut charge_point_state = ChargePointState::default();
         hook.lock().unwrap().evaluate(&mut charge_point_state)?;
@@ -186,6 +305,13 @@ mod tests {
                 },
             },
         )));
+
+        hook.lock()
+            .unwrap()
+            .fronius_api
+            .lock()
+            .unwrap()
+            .power_flow_realtime_data = Some(default_powerflow_realtime_data());
 
         let mut charge_point_state = ChargePointState::new(0.9988504095416009, 6255.9, 9.0, 695.9);
         hook.lock().unwrap().evaluate(&mut charge_point_state)?;

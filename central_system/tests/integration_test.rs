@@ -42,7 +42,7 @@ struct ExpectedJSONResponseFormat {
 
 //-------------------------------------------------------------------------------------------------
 
-fn validate_message(
+fn validate_request_message(
     websocket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
     expected_message: &ExpectedJSONRequestFormat,
 ) -> Result<String, Box<dyn std::error::Error>> {
@@ -77,6 +77,12 @@ fn validate_initial_messages(
         ExpectedJSONRequestFormat {
             message_id: 2,
             uuid: "".to_owned(),
+            message_type: "TriggerMessage".to_owned(),
+            json: json!({"requestedMessage": "StatusNotification"}),
+        },
+        ExpectedJSONRequestFormat {
+            message_id: 2,
+            uuid: "".to_owned(),
             message_type: "ClearChargingProfile".to_owned(),
             json: json!({}),
         },
@@ -93,7 +99,7 @@ fn validate_initial_messages(
             json: json!({ "requestedMessage": "MeterValues" }),
         },
     ] {
-        let uuid = validate_message(websocket, &expected_message)?;
+        let uuid = validate_request_message(websocket, &expected_message)?;
         websocket.send(tungstenite::Message::text(format!(
             "[3,\"{}\",{{\"status\": \"Accepted\"}}]",
             uuid
@@ -102,6 +108,66 @@ fn validate_initial_messages(
 
     Ok(())
 }
+
+fn send_status_notification(
+    websocket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
+    payload: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"StatusNotification\",{}]",
+        payload
+    )))?;
+
+    match serde_json::from_str::<ExpectedJSONResponseFormat>(websocket.read()?.to_text()?) {
+        Ok(response) => {
+            assert_eq!(response.message_id, 3);
+            assert_eq!(response.uuid, "12345");
+            assert_eq!(response.json, json!({}));
+        }
+        _ => assert!(false),
+    }
+
+    Ok(())
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static CHARGING_STATUS_NOTIFCATION: &str = r#"{
+    "connectorId": 1,
+    "errorCode": "NoError",
+    "info": "",
+    "status": "Charging",
+    "timestamp": "2026-01-18T14:09:24Z",
+    "vendorId": "Schneider Electric",
+    "vendorErrorCode": "0.0"
+}"#;
+
+static START_TRANSACTION_REQUEST_WITH_INVALID_ID: &str = r#"{
+    "connectorId": 1,
+    "idTag": "INVALID_ID_TAG",
+    "meterStart": 0,
+    "timestamp": "2026-01-18T14:09:24Z"
+}"#;
+
+static AVAILABLE_STATUS_NOTIFCATION: &str = r#"{
+    "connectorId": 1,
+    "errorCode": "NoError",
+    "info": "",
+    "status": "Available",
+    "timestamp": "2026-01-18T14:09:24Z",
+    "vendorId": "Schneider Electric",
+    "vendorErrorCode": "0.0"
+}"#;
+
+static SUSPENDEDEV_STATUS_NOTIFCATION: &str = r#"{
+    "connectorId": 1,
+    "errorCode": "NoError",
+    "info": "",
+    "status": "SuspendedEV",
+    "timestamp": "2026-01-18T14:09:24Z",
+    "vendorId": "Schneider Electric",
+    "vendorErrorCode": "0.0"
+}"#;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -243,7 +309,6 @@ fn meter_values_request() -> Result<(), Box<dyn Error>> {
     };
 
     let mut integration_test = common::IntegrationTest::new(config);
-
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
 
@@ -325,16 +390,9 @@ fn start_transaction_blocked() -> Result<(), Box<dyn Error>> {
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
 
-    static START_TRANSACTION_REQUEST: &str = r#"{
-        "connectorId": 1,
-        "idTag": "INVALID_ID_TAG",
-        "meterStart": 0,
-        "timestamp": "2026-01-18T14:09:24Z"
-    }"#;
-
     websocket.send(tungstenite::Message::text(format!(
         "[2,\"12345\",\"StartTransaction\",{}]",
-        START_TRANSACTION_REQUEST
+        START_TRANSACTION_REQUEST_WITH_INVALID_ID
     )))?;
 
     let message = websocket.read()?;
@@ -466,30 +524,8 @@ fn charging_status_notification() -> Result<(), Box<dyn Error>> {
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
 
-    static CHARGING_STATUS_NOTIFCATION: &str = r#"{
-        "connectorId": 1,
-        "errorCode": "NoError",
-        "info": "",
-        "status": "Charging",
-        "timestamp": "2026-01-18T14:09:24Z",
-        "vendorId": "Schneider Electric",
-        "vendorErrorCode": "0.0"
-    }"#;
-
-    websocket.send(tungstenite::Message::text(format!(
-        "[2,\"12345\",\"StatusNotification\",{}]",
-        CHARGING_STATUS_NOTIFCATION
-    )))?;
-
-    let message = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(message.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(response.json, json!({}));
-        }
-        _ => assert!(false),
-    }
+    send_status_notification(&mut websocket, AVAILABLE_STATUS_NOTIFCATION)?;
+    send_status_notification(&mut websocket, CHARGING_STATUS_NOTIFCATION)?;
 
     assert!(
         integration_test
@@ -671,30 +707,7 @@ fn available_status_notification() -> Result<(), Box<dyn Error>> {
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
 
-    static CHARGING_STATUS_NOTIFCATION: &str = r#"{
-        "connectorId": 1,
-        "errorCode": "NoError",
-        "info": "",
-        "status": "Available",
-        "timestamp": "2026-01-18T14:09:24Z",
-        "vendorId": "Schneider Electric",
-        "vendorErrorCode": "0.0"
-    }"#;
-
-    websocket.send(tungstenite::Message::text(format!(
-        "[2,\"12345\",\"StatusNotification\",{}]",
-        CHARGING_STATUS_NOTIFCATION
-    )))?;
-
-    let message = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(message.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(response.json, json!({}));
-        }
-        _ => assert!(false),
-    }
+    send_status_notification(&mut websocket, AVAILABLE_STATUS_NOTIFCATION)?;
 
     assert!(
         !integration_test
@@ -704,7 +717,7 @@ fn available_status_notification() -> Result<(), Box<dyn Error>> {
             .block_battery_for_duration_called
     );
     assert!(
-        integration_test
+        !integration_test
             .fronius_mock
             .lock()
             .unwrap()
@@ -754,33 +767,12 @@ fn suspendedev_status_notification() -> Result<(), Box<dyn Error>> {
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
 
-    static CHARGING_STATUS_NOTIFCATION: &str = r#"{
-        "connectorId": 1,
-        "errorCode": "NoError",
-        "info": "",
-        "status": "SuspendedEV",
-        "timestamp": "2026-01-18T14:09:24Z",
-        "vendorId": "Schneider Electric",
-        "vendorErrorCode": "0.0"
-    }"#;
-
-    websocket.send(tungstenite::Message::text(format!(
-        "[2,\"12345\",\"StatusNotification\",{}]",
-        CHARGING_STATUS_NOTIFCATION
-    )))?;
-
-    let response_message = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(response_message.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(response.json, json!({}));
-        }
-        _ => assert!(false),
-    }
+    send_status_notification(&mut websocket, AVAILABLE_STATUS_NOTIFCATION)?;
+    send_status_notification(&mut websocket, CHARGING_STATUS_NOTIFCATION)?;
+    send_status_notification(&mut websocket, SUSPENDEDEV_STATUS_NOTIFCATION)?;
 
     assert!(
-        !integration_test
+        integration_test
             .fronius_mock
             .lock()
             .unwrap()
@@ -854,6 +846,8 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
             average_price: 20.0,
         });
     }
+
+    send_status_notification(&mut websocket, AVAILABLE_STATUS_NOTIFCATION)?;
 
     websocket.send(tungstenite::Message::text(format!(
         "[2,\"12345\",\"Authorize\",{}]",
@@ -1006,6 +1000,16 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
         }
         _ => assert!(false),
     }
+
+    send_status_notification(&mut websocket, CHARGING_STATUS_NOTIFCATION)?;
+
+    assert!(
+        integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .block_battery_for_duration_called
+    );
 
     static METER_VALUES_REQUEST: &str = r#"{
         "connectorId": 1,
@@ -1180,9 +1184,49 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
                     },
                 ]
             );
+
+            websocket.send(tungstenite::Message::text(format!(
+                "[3,\"{}\",{{\"status\": \"Accepted\"}}]",
+                response.uuid
+            )))?;
         }
         _ => assert!(false),
     }
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"StopTransaction\",{}]",
+        json!({"meterStop": 253580, "reason": "EVDisconnected", "timestamp": "2026-02-04T05:39:05Z", "transactionId": 1})
+    )))?;
+
+    let stop_transaction_response = websocket.read()?;
+    match serde_json::from_str::<ExpectedJSONResponseFormat>(stop_transaction_response.to_text()?) {
+        Ok(response) => {
+            assert_eq!(response.message_id, 3);
+            assert_eq!(response.uuid, "12345");
+            assert_eq!(response.json, json!({"idTagInfo": {"status": "Accepted"}}));
+        }
+        _ => assert!(false),
+    }
+
+    send_status_notification(&mut websocket, AVAILABLE_STATUS_NOTIFCATION)?;
+
+    validate_request_message(
+        &mut websocket,
+        &ExpectedJSONRequestFormat {
+            message_id: 2,
+            uuid: "".to_owned(),
+            message_type: "ClearChargingProfile".to_owned(),
+            json: json!({"id": 2, "connectorId": 1, "chargingProfilePurpose": "TxProfile", "stackLevel": 0}),
+        },
+    )?;
+
+    assert!(
+        integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .unblock_battery_called
+    );
 
     integration_test.teardown(log_directory.as_str(), &mut websocket);
     Ok(())

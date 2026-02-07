@@ -18,11 +18,11 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
     info!("Starting OCPPCentralSystem v{}", VERSION);
-
     let hooks = Arc::new(Mutex::new(OcppHooks::new(
         Arc::new(Mutex::new(FroniusApiAdapter::new(&config.fronius)?)),
         Arc::new(Mutex::new(AwattarApiAdapter::default())),
         config.clone(),
     )));
+
     ocpp::run::<OcppHooks<FroniusApiAdapter, AwattarApiAdapter>>(&config, Arc::clone(&hooks))
 }

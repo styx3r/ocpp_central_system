@@ -46,14 +46,23 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             "Could not convert max_current to Decimal!".to_owned(),
         ))?;
 
+        if let Some(cached_max_current) = charge_point_state.get_max_current()
+            && cached_max_current - max_current < 1.0
+        {
+            info!("Max. charging current won't be changed because difference is < 1.0 A");
+            return Ok(());
+        }
+
         let grid_based_charging_profile = if let Some(grid_based_smart_charging_profile) =
             charge_point_state.get_grid_based_smart_charging_profile()
         {
-            let mut grid_based_smart_charging_profile_handle = grid_based_smart_charging_profile.clone();
+            let mut grid_based_smart_charging_profile_handle =
+                grid_based_smart_charging_profile.clone();
+
+            // NOTE: This RELIES on the fact that the second charging schedule period is the cheapest_period
             grid_based_smart_charging_profile_handle
                 .charging_schedule
-                .charging_schedule_period[1] // NOTE: This RELIES on the fact that the second
-                                             // charging schedule period is the cheapest_period
+                .charging_schedule_period[1]
                 .limit = limit;
 
             grid_based_smart_charging_profile_handle

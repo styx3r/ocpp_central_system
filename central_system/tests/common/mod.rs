@@ -1,7 +1,12 @@
 use awattar::awattar_mock::AwattarApiMock;
+use chrono::Utc;
 use config::config;
-use fronius::FroniusMock;
+use fronius::{
+    Data, FroniusMock, PowerFlowRealtimeData, PowerFlowRealtimeDataBody,
+    PowerFlowRealtimeDataHeader, Site, Smartloads, Status,
+};
 use std::{
+    collections::HashMap,
     net::TcpStream,
     sync::{Arc, Mutex},
     thread::{JoinHandle, spawn},
@@ -32,6 +37,10 @@ impl IntegrationTest {
 
     pub fn setup(&mut self) -> WebSocket<MaybeTlsStream<TcpStream>> {
         let config_clone = self.config.clone();
+
+        self.fronius_mock.lock().unwrap().power_flow_realtime_data =
+            Some(self.default_powerflow_realtime_data());
+
         let fronius_mock_handle = Arc::clone(&self.fronius_mock);
         let awattar_mock_handle = Arc::clone(&self.awattar_mock);
 
@@ -83,5 +92,45 @@ impl IntegrationTest {
         }
 
         std::fs::remove_dir_all(log_directory).expect("Cleanup failed");
+    }
+
+    fn default_powerflow_realtime_data(&self) -> PowerFlowRealtimeData {
+        PowerFlowRealtimeData {
+            body: PowerFlowRealtimeDataBody {
+                data: Data {
+                    inverters: HashMap::default(),
+                    site: Site {
+                        mode: String::default(),
+                        battery_standby: false,
+                        backup_mode: false,
+                        p_grid: None,
+                        p_load: None,
+                        p_akku: None,
+                        p_pv: None,
+                        rel_self_consumption: None,
+                        rel_autonomy: None,
+                        meter_location: String::default(),
+                        e_day: None,
+                        e_year: None,
+                        e_total: None,
+                    },
+                    smartloads: Smartloads {
+                        ohmpilots: HashMap::default(),
+                        ohmpilot_ecos: HashMap::default(),
+                    },
+                    secondart_meters: HashMap::default(),
+                    version: String::default(),
+                },
+            },
+            head: PowerFlowRealtimeDataHeader {
+                request_arguments: HashMap::default(),
+                status: Status {
+                    code: 0,
+                    reason: String::default(),
+                    user_message: String::default(),
+                },
+                timestamp: Utc::now(),
+            },
+        }
     }
 }
