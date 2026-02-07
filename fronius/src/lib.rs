@@ -2,7 +2,6 @@ mod api_types;
 mod digest_auth;
 mod fronius_mock;
 
-use api_types::*;
 use config::config::Fronius;
 use digest_auth::DigestAuth;
 
@@ -16,12 +15,15 @@ use reqwest::{
 use std::time::Duration;
 
 pub use fronius_mock::FroniusMock;
+pub use api_types::*;
 
 //-------------------------------------------------------------------------------------------------
 
 static API_VERSION_URI: &str = "/api/status/version";
 static LOGIN_URI: &str = "/api/commands/Login";
 static TIME_OF_USE_URI: &str = "/api/config/timeofuse";
+
+static GET_POWER_FLOW_REALTIME_DATA: &str = "/solar_api/v1/GetPowerFlowRealtimeData.fcgi";
 
 static SUPPORTED_COMMANDS_API_VERSION: &str = "8.4.1";
 static SUPPORTED_CONFIG_API_VERSION: &str = "10.2.0";
@@ -39,6 +41,10 @@ pub trait FroniusApi {
     ) -> Result<(), Box<dyn std::error::Error>>;
 
     fn fully_unblock_battery(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+
+    fn get_power_flow_realtime_data(
+        &mut self,
+    ) -> Result<PowerFlowRealtimeData, Box<dyn std::error::Error>>;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -51,7 +57,8 @@ pub struct FroniusApiAdapter {
 //-------------------------------------------------------------------------------------------------
 
 impl FroniusApiAdapter {
-    pub fn default() -> Self {
+    #[cfg(test)]
+    fn default() -> Self {
         Self {
             digest_auth: DigestAuth::new(&"".to_owned(), &"".to_owned()),
             fronius_config: Fronius {
@@ -121,6 +128,13 @@ impl FroniusApiAdapter {
         } else {
             Err("Login failed".into())
         }
+    }
+
+    fn parse_powerflow_realtime_data(
+        &self,
+        payload: &str,
+    ) -> Result<PowerFlowRealtimeData, Box<dyn std::error::Error>> {
+        Ok(serde_json::from_str::<PowerFlowRealtimeData>(payload)?)
     }
 }
 
@@ -233,6 +247,95 @@ impl FroniusApi for FroniusApiAdapter {
         }
 
         info!("Battery unblocked!");
+        Ok(())
+    }
+
+    fn get_power_flow_realtime_data(
+        &mut self,
+    ) -> Result<PowerFlowRealtimeData, Box<dyn std::error::Error>> {
+        self.parse_powerflow_realtime_data(
+            Client::new()
+                .get(&format!(
+                    "{}{}",
+                    self.fronius_config.url,
+                    GET_POWER_FLOW_REALTIME_DATA.to_owned()
+                ))
+                .send()?
+                .text()?
+                .as_str(),
+        )
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_powerflow_realtime_data_response() -> Result<(), Box<dyn std::error::Error>> {
+        static POWERFLOW_REALTIME_DATA_RESPONSE: &str = r#"{
+   "Body" : {
+      "Data" : {
+         "Inverters" : {
+            "1" : {
+               "Battery_Mode" : "normal",
+               "DT" : 1,
+               "E_Day" : null,
+               "E_Total" : 23329247.706388891,
+               "E_Year" : null,
+               "P" : 378.76364135742188,
+               "SOC" : 94.799999999999997
+            }
+         },
+         "SecondaryMeters" : {},
+         "Site" : {
+            "BackupMode" : false,
+            "BatteryStandby" : true,
+            "E_Day" : null,
+            "E_Total" : 23329247.706388891,
+            "E_Year" : null,
+            "Meter_Location" : "grid",
+            "Mode" : "bidirectional",
+            "P_Akku" : 388.62789916992188,
+            "P_Grid" : 16.399999999999999,
+            "P_Load" : -395.23117675781248,
+            "P_PV" : 38.069236755371094,
+            "rel_Autonomy" : 95.850529774869088,
+            "rel_SelfConsumption" : 100.0
+         },
+         "Smartloads" : {
+            "OhmpilotEcos" : {},
+            "Ohmpilots" : {
+               "1" : {
+                  "P_AC_Total" : 0.0,
+                  "State" : "normal",
+                  "Temperature" : 63.5
+               }
+            }
+         },
+         "Version" : "13"
+      }
+   },
+   "Head" : {
+      "RequestArguments" : {},
+      "Status" : {
+         "Code" : 0,
+         "Reason" : "",
+         "UserMessage" : ""
+      },
+      "Timestamp" : "2026-02-06T16:10:32+00:00"
+   }
+}
+"#;
+
+        // NOTE: Just adding this test to get a fast response if changes are made in the
+        // api_types.rs
+        let default_fronius_api_adapter = FroniusApiAdapter::default();
+        default_fronius_api_adapter
+            .parse_powerflow_realtime_data(POWERFLOW_REALTIME_DATA_RESPONSE)?;
+
         Ok(())
     }
 }

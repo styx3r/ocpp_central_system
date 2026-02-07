@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use chrono::{DateTime, Utc};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ApiVersions {
@@ -176,4 +177,150 @@ pub struct LoginResponse {
     #[serde(alias = "resultData")]
     pub result_data: ResultData,
     pub success: bool,
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Status {
+    #[serde(alias = "Code")]
+    pub code: i64,
+    #[serde(alias = "Reason")]
+    pub reason: String,
+    #[serde(alias = "UserMessage")]
+    pub user_message: String
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct PowerFlowRealtimeDataHeader {
+    #[serde(alias = "RequestArguments")]
+    pub request_arguments: std::collections::HashMap<String, String>,
+    #[serde(alias = "Status")]
+    pub status: Status,
+    #[serde(alias = "Timestamp")]
+    pub timestamp: DateTime<Utc>
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Inverter {
+    #[serde(alias = "Battery_Mode")]
+    pub battery_mode: String,
+    #[serde(alias = "DT")]
+    pub dt: u64,
+    #[serde(alias = "E_Day")]
+    pub e_day: Option<f64>,
+    #[serde(alias = "E_Total")]
+    pub e_total: Option<f64>,
+    #[serde(alias = "E_Year")]
+    pub e_year: Option<f64>,
+    #[serde(alias = "P")]
+    pub power: Option<f64>,
+    #[serde(alias = "SOC")]
+    pub soc: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Site {
+    #[serde(alias = "Mode")]
+    pub mode: String,
+    #[serde(alias = "BatteryStandby")]
+    pub battery_standby: bool,
+    #[serde(alias = "BackupMode")]
+    pub backup_mode: bool,
+    #[serde(alias = "P_Grid")]
+    pub p_grid: Option<f64>,
+    #[serde(alias = "P_Load")]
+    pub p_load: Option<f64>,
+    #[serde(alias = "P_Akku")]
+    pub p_akku: Option<f64>,
+    #[serde(alias = "P_PV")]
+    pub p_pv: Option<f64>,
+    #[serde(alias = "rel_SelfConsumption")]
+    pub rel_self_consumption: Option<f64>,
+    #[serde(alias = "rel_Autonomy")]
+    pub rel_autonomy: Option<f64>,
+    #[serde(alias = "Meter_Location")]
+    pub meter_location: String,
+    #[serde(alias = "E_Day")]
+    pub e_day: Option<f64>,
+    #[serde(alias = "E_Year")]
+    pub e_year: Option<f64>,
+    #[serde(alias = "E_Total")]
+    pub e_total: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Ohmpilot {
+    #[serde(alias = "P_AC_Total")]
+    pub p_ac_total: f64,
+    #[serde(alias = "State")]
+    pub state: String,
+    #[serde(alias = "Temperature")]
+    pub temperature: f64,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct OhmpilotEco {
+    #[serde(alias = "P_AC_Total")]
+    pub p_ac_total: f64,
+    #[serde(alias = "State_HR1")]
+    pub state_hr1: String,
+    #[serde(alias = "State_HR2")]
+    pub state_hr2: String,
+    #[serde(alias = "Temperature_1")]
+    pub temperature_1: f64,
+    #[serde(alias = "Temperature_2")]
+    pub temperature_2: f64,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Smartloads {
+    #[serde(alias = "Ohmpilots")]
+    pub ohmpilots: std::collections::HashMap<String, Ohmpilot>,
+    #[serde(alias = "OhmpilotEcos")]
+    pub ohmpilot_ecos: std::collections::HashMap<String, OhmpilotEco>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct SecondaryMeters {
+    #[serde(alias = "P")]
+    pub power: f64,
+    #[serde(alias = "MLoc")]
+    pub meter_location: f64,
+    #[serde(alias = "Label")]
+    pub label: String,
+    #[serde(alias = "Category")]
+    pub category: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Data {
+    #[serde(alias = "Inverters")]
+    pub inverters: std::collections::HashMap<String, Inverter>,
+    #[serde(alias = "Site")]
+    pub site: Site,
+    #[serde(alias = "Smartloads")]
+    pub smartloads: Smartloads,
+    #[serde(alias = "SecondaryMeters")]
+    pub secondart_meters: std::collections::HashMap<String, SecondaryMeters>,
+    #[serde(alias = "Version")]
+    pub version: String
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct PowerFlowRealtimeDataBody {
+    #[serde(alias = "Data")]
+    pub data: Data,
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct PowerFlowRealtimeData {
+    #[serde(alias = "Body")]
+    pub body: PowerFlowRealtimeDataBody,
+    #[serde(alias = "Head")]
+    pub head: PowerFlowRealtimeDataHeader,
 }
