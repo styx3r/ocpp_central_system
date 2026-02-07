@@ -34,6 +34,8 @@ pub(crate) fn handle_start_transaction_request(
         charge_point_state.running_transactions.push(Transaction {
             id_tag: Some(start_transaction.id_tag.clone()),
             transaction_id,
+            meter_value_start: start_transaction.meter_start,
+            meter_value_stop: 0
         });
     }
 

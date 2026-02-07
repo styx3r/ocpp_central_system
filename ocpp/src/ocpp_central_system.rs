@@ -215,6 +215,16 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
             payload: clear_charging_profile_request,
         });
 
+        let (uuid, status_notification_request) = TriggerMessageBuilder::new(MessageTrigger::StatusNotification, None)
+            .build()
+            .serialize()?;
+
+        charge_point_state.requests_to_send.push(RequestToSend {
+            message_type: MessageTypeName::TriggerMessage,
+            uuid,
+            payload: status_notification_request,
+        });
+
         Ok(())
     }
 
@@ -287,7 +297,7 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
         let charge_point_handle = self.charge_point_state.clone();
         let mut charge_point_state = charge_point_handle.lock().unwrap();
 
-        trace!("Visiting request message: {}", request.json);
+        trace!("Received: {}", request.json);
 
         let merged_id_tags: Vec<config::config::IdTag> = self.config.id_tags.clone();
         let response = match request.message_type {

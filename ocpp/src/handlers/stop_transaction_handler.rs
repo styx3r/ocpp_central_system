@@ -4,7 +4,7 @@ use rust_ocpp::v1_6::{
 };
 
 use crate::ocpp_types::CustomError;
-use crate::{ChargePointState, Transaction};
+use crate::ChargePointState;
 
 //------------------------------------------------------------------------------------------------
 
@@ -12,21 +12,19 @@ pub(crate) fn handle_stop_transaction_request(
     stop_transaction_request: &stop_transaction::StopTransactionRequest,
     charge_point_state: &mut ChargePointState,
 ) -> Result<stop_transaction::StopTransactionResponse, CustomError> {
-    let transaction = Transaction {
-        id_tag: stop_transaction_request.id_tag.clone(),
-        transaction_id: stop_transaction_request.transaction_id,
-    };
-
-    let authorization_status = match charge_point_state
+    let (authorization_status, transaction) = match charge_point_state
         .running_transactions
-        .iter()
-        .find(|e| e.transaction_id == transaction.transaction_id)
+        .iter_mut()
+        .find(|e| e.transaction_id == stop_transaction_request.transaction_id)
     {
-        Some(_) => AuthorizationStatus::Accepted,
-        _ => AuthorizationStatus::Invalid,
+        Some(transaction) => {
+            transaction.meter_value_stop = stop_transaction_request.meter_stop;
+            (AuthorizationStatus::Accepted, Some(transaction.clone()))
+        }
+        _ => (AuthorizationStatus::Invalid, None),
     };
 
-    if authorization_status == AuthorizationStatus::Accepted {
+    if authorization_status == AuthorizationStatus::Accepted && let Some(transaction) = transaction {
         charge_point_state
             .running_transactions
             .retain(|e| *e != transaction);
@@ -47,6 +45,7 @@ pub(crate) fn handle_stop_transaction_request(
 mod tests {
     use super::*;
     use rust_ocpp::v1_6::types::Reason;
+    use crate::Transaction;
 
     static UNITTEST_ID_TAG: &str = "ID_TAG";
     static UNITTEST_TRANSACTION_ID: i32 = 1;
@@ -81,12 +80,12 @@ mod tests {
     #[test]
     fn stop_transaction_request_with_running_transaction_and_id_tag() -> Result<(), CustomError> {
         let mut charge_point_state = ChargePointState::default();
-        charge_point_state
-            .running_transactions
-            .push(Transaction {
-                id_tag: Some(UNITTEST_ID_TAG.to_string()),
-                transaction_id: UNITTEST_TRANSACTION_ID,
-            });
+        charge_point_state.running_transactions.push(Transaction {
+            id_tag: Some(UNITTEST_ID_TAG.to_string()),
+            transaction_id: UNITTEST_TRANSACTION_ID,
+            meter_value_start: 0,
+            meter_value_stop: 0
+        });
 
         let response = handle_stop_transaction_request(
             &stop_transaction::StopTransactionRequest {
@@ -116,12 +115,12 @@ mod tests {
     fn stop_transaction_request_with_running_transaction_and_no_id_tag() -> Result<(), CustomError>
     {
         let mut charge_point_state = ChargePointState::default();
-        charge_point_state
-            .running_transactions
-            .push(Transaction {
-                id_tag: Some(UNITTEST_ID_TAG.to_string()),
-                transaction_id: UNITTEST_TRANSACTION_ID,
-            });
+        charge_point_state.running_transactions.push(Transaction {
+            id_tag: Some(UNITTEST_ID_TAG.to_string()),
+            transaction_id: UNITTEST_TRANSACTION_ID,
+            meter_value_start: 0,
+            meter_value_stop: 0
+        });
 
         let response = handle_stop_transaction_request(
             &stop_transaction::StopTransactionRequest {

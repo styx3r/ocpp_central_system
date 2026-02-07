@@ -4,7 +4,7 @@ mod ocpp_central_system;
 mod ocpp_types;
 mod visitor;
 
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use rusqlite::{Connection, Result};
 use rust_ocpp::v1_6::types::ChargingProfile;
 use std::process::exit;
@@ -69,6 +69,8 @@ pub trait OcppAuthorizationHook {
 pub struct Transaction {
     pub id_tag: Option<String>,
     pub transaction_id: i32,
+    pub meter_value_start: i32,
+    pub meter_value_stop: i32,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -80,6 +82,8 @@ pub struct RequestToSend {
 
 #[derive(Default, Clone)]
 pub struct ChargePointState {
+    charge_point_status: Option<ChargePointStatus>,
+
     latest_cos_phi: Option<f64>,
     latest_power: Option<f64>,
     latest_current: Option<f64>,
@@ -94,11 +98,14 @@ pub struct ChargePointState {
 
     smart_charging: bool,
     grid_based_smart_charging_profile: Option<ChargingProfile>,
+
+    pv_overproduction: Vec<f64>,
 }
 
 impl ChargePointState {
     pub fn new(cos_phi: f64, power: f64, current: f64, voltage: f64) -> Self {
         Self {
+            charge_point_status: None,
             latest_cos_phi: Some(cos_phi),
             latest_power: Some(power),
             latest_current: Some(current),
@@ -110,7 +117,12 @@ impl ChargePointState {
             remote_start_transaction_id_tags: vec![],
             smart_charging: false,
             grid_based_smart_charging_profile: None,
+            pv_overproduction: vec![],
         }
+    }
+
+    pub fn get_charge_point_status(&self) -> &Option<ChargePointStatus> {
+        &self.charge_point_status
     }
 
     pub fn get_latest_cos_phi(&self) -> Option<f64> {
@@ -153,6 +165,14 @@ impl ChargePointState {
         &self.grid_based_smart_charging_profile
     }
 
+    pub fn get_pv_overproduction(&self) -> &Vec<f64> {
+        &self.pv_overproduction
+    }
+
+    pub fn set_charge_point_status(&mut self, status: ChargePointStatus) {
+        self.charge_point_status = Some(status);
+    }
+
     pub fn set_latest_cos_phi(&mut self, cos_phi: f64) {
         self.latest_cos_phi = Some(cos_phi);
     }
@@ -169,8 +189,16 @@ impl ChargePointState {
         self.remote_start_transaction_id_tags.push(id_tag);
     }
 
+    pub fn add_pv_overproduction(&mut self, overproduction: f64) {
+        self.pv_overproduction.push(overproduction);
+    }
+
     pub fn clear_remote_start_transaction_id_tags(&mut self) {
         self.remote_start_transaction_id_tags.clear();
+    }
+
+    pub fn remove_first_element_pv_overproduction(&mut self) {
+        self.pv_overproduction.remove(0);
     }
 
     pub fn enable_smart_charging(&mut self) {
@@ -277,7 +305,7 @@ pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizati
 
         // Request BootNotification on connection
         let boot_notification_request = ocpp_central_system.get_boot_message_request()?;
-        info!(
+        trace!(
             "Sending pending message {}",
             boot_notification_request.payload
         );
@@ -293,7 +321,7 @@ pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizati
                     dispatch_message(&mut ocpp_central_system, &text)
                         .iter()
                         .try_for_each(|message| -> Result<(), Box<dyn Error>> {
-                            info!("Sending {}", message);
+                            trace!("Sending {}", message);
                             Ok(websocket.send(tungstenite::Message::text(message))?)
                         })?;
                 }
