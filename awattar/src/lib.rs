@@ -63,7 +63,8 @@ impl AwattarApiAdapter {
         config: &config::Config,
     ) -> Option<Period> {
         let window_size = (config.electric_vehicle.average_watt_hours_needed as f64
-            / config.charging_point.max_charging_power.ceil()) as usize;
+            / config.charging_point.max_charging_power)
+            .ceil() as usize;
         let sliding_windows_average = market_data
             .data
             .windows(window_size)
