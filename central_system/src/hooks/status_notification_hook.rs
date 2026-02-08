@@ -66,26 +66,31 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
             return Ok(());
         }
 
-        let block_battery =
-            Box::new(
-                |_: &mut ChargePointState| -> Result<(), Box<dyn std::error::Error>> {
-                    self.fronius_api.lock().unwrap().block_battery_for_duration(
-                        &Duration::from_hours(BATTERY_BLOCKING_TIME_IN_HOURS),
-                    )
-                },
-            );
-
-        let unblock_battery = Box::new(
-            |state: &mut ChargePointState| -> Result<(), Box<dyn std::error::Error>> {
-                unblock_battery_and_clear_tx_profiles(state, Arc::clone(&self.fronius_api))
+        let block_battery = Box::new(
+            |_: &mut ChargePointState,
+             fronius_api: Arc<Mutex<T>>|
+             -> Result<(), Box<dyn std::error::Error>> {
+                fronius_api
+                    .lock()
+                    .unwrap()
+                    .block_battery_for_duration(&Duration::from_hours(
+                        BATTERY_BLOCKING_TIME_IN_HOURS,
+                    ))
             },
         );
+
+        let unblock_battery = Box::new(unblock_battery_and_clear_tx_profiles);
 
         let mut state_transitions: Vec<(
             ChargePointStatus,
             Vec<(
                 ChargePointStatus,
-                Box<dyn FnMut(&mut ChargePointState) -> Result<(), Box<dyn std::error::Error>>>,
+                Box<
+                    dyn FnMut(
+                        &mut ChargePointState,
+                        Arc<Mutex<T>>,
+                    ) -> Result<(), Box<dyn std::error::Error>>,
+                >,
             )>,
         )> = vec![
             (
@@ -137,7 +142,7 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
                 .iter_mut()
                 .find(|(next_state, _)| *next_state == status_notification.status)
             {
-                next_state_action(charge_point_state)?;
+                next_state_action(charge_point_state, Arc::clone(&self.fronius_api))?;
                 charge_point_state.set_charge_point_status(status_notification.status.clone());
             } else {
                 info!(

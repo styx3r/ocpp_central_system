@@ -1,19 +1,20 @@
-use crate::{OcppHooks, hooks::calculate_max_current};
+use crate::OcppHooks;
 use awattar::AwattarApi;
 use fronius::FroniusApi;
-use log::info;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use chrono::Duration;
-
-use config::config;
 use ocpp::{
     ChargePointState, ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType,
     CustomError, Decimal, MessageBuilder, MessageTypeName, RequestToSend,
     charging_profile_builder::ChargingProfileBuilder,
+    clear_charging_profile_builder::ClearChargingProfileBuilder,
     set_charging_profile_builder::SetChargingProfileBuilder,
 };
+
+//-------------------------------------------------------------------------------------------------
+
+static CONNECTOR_ID: i32 = 1;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -22,21 +23,60 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
         &mut self,
         charging_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        calculate_power_flow_realtime_data(
-            &self.config,
+        let possible_charging_current = self.calculate_power_flow_realtime_data(
             charging_point_state,
             Arc::clone(&self.fronius_api),
         );
 
-        if let Some(_) = charging_point_state.get_latest_current()
-            && let Some(_) = charging_point_state.get_latest_power()
+        if let Some(_) = charging_point_state.get_latest_current_offered()
+            && let Some(_) = charging_point_state.get_latest_power_offered()
             && let Some(_) = charging_point_state.get_latest_voltage()
             && let Some(_) = charging_point_state.get_latest_cos_phi()
         {
+            let charging_profile_max_current =
+                self.get_updated_max_charging_current(charging_point_state)?;
+
             if !charging_point_state.get_smart_charging() {
-                calculate_default_tx_profile(&self.config, charging_point_state)?;
+                calculate_default_tx_profile(charging_point_state, charging_profile_max_current)?;
             } else if charging_point_state.get_smart_charging() {
-                self.calculate_grid_based_smart_charging_tx_profile(charging_point_state)?;
+                if let Some(possible_charging_current) = possible_charging_current {
+                    if possible_charging_current
+                        > self.config.charging_point.minimum_charging_current
+                    {
+                        let possible_charging_current_decimal =
+                            Decimal::from_f64_retain(possible_charging_current)
+                                .ok_or(CustomError::Common(
+                                    "Could not convert possible charging current into decimal"
+                                        .to_string(),
+                                ))?
+                                .round_dp(1);
+
+                        self.calculate_pv_tx_profile(
+                            charging_point_state,
+                            possible_charging_current_decimal,
+                        )?;
+                    } else {
+                        let (uuid, clear_charging_profile) = ClearChargingProfileBuilder::new(
+                            Some(crate::hooks::TX_PV_CHARGING_PROFILE_ID),
+                            Some(CONNECTOR_ID),
+                            Some(ChargingProfilePurposeType::TxProfile),
+                            Some(crate::hooks::TX_PV_CHARGING_STACK_LEVEL as i32),
+                        )
+                        .build()
+                        .serialize()?;
+
+                        charging_point_state.add_request_to_send(ocpp::RequestToSend {
+                            uuid: uuid.clone(),
+                            message_type: MessageTypeName::ClearChargingProfile,
+                            payload: clear_charging_profile,
+                        });
+                    }
+                }
+
+                self.calculate_grid_based_smart_charging_tx_profile(
+                    charging_point_state,
+                    charging_profile_max_current,
+                )?;
             }
         }
 
@@ -46,82 +86,13 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
 
 //-------------------------------------------------------------------------------------------------
 
-fn calculate_power_flow_realtime_data<T: FroniusApi>(
-    config: &config::Config,
-    charging_point_state: &mut ChargePointState,
-    fronius_api: Arc<Mutex<T>>,
-) {
-    if let Ok(powerflow_realtime_data) = fronius_api.lock().unwrap().get_power_flow_realtime_data()
-    {
-        let site_powerflow_realtime_data = powerflow_realtime_data.body.data.site;
-
-        if let Some(power_pv) = site_powerflow_realtime_data.p_pv
-            && let Some(power_load) = site_powerflow_realtime_data.p_load
-            && let Some(power_akku) = site_powerflow_realtime_data.p_akku
-        {
-            let overproduction = if power_akku < 0.0 {
-                power_pv + power_load + power_akku
-            } else {
-                power_pv + power_load
-            };
-
-            info!("Current PV overproduction {}W", overproduction);
-
-            charging_point_state.add_pv_overproduction(overproduction);
-        }
-
-        let threshold = Duration::minutes(15);
-        let expected_vector_size = (threshold.as_seconds_f64()
-            / config.charging_point.heartbeat_interval as f64)
-            .ceil() as usize;
-
-        let pv_overproduction = charging_point_state.get_pv_overproduction();
-        if pv_overproduction.len() == expected_vector_size {
-            let pv_overproduction_average =
-                pv_overproduction.iter().sum::<f64>() / pv_overproduction.len() as f64;
-
-            info!(
-                "PV overproduction in the last {}: {}",
-                threshold, pv_overproduction_average
-            );
-
-            if let Some(latest_cos_phi) = charging_point_state.get_latest_cos_phi()
-                && let Some(latest_voltage) = charging_point_state.get_latest_voltage()
-            {
-                info!(
-                    "Resulting in {}A charging current",
-                    pv_overproduction_average / (latest_cos_phi * latest_voltage)
-                );
-            }
-
-            charging_point_state.remove_first_element_pv_overproduction();
-        }
-    }
-}
-
-//-------------------------------------------------------------------------------------------------
-
 fn calculate_default_tx_profile(
-    config: &config::Config,
     charging_point_state: &mut ChargePointState,
+    charging_profile_max_current: Decimal,
 ) -> Result<(), CustomError> {
-    let limit = calculate_max_current(config, charging_point_state)?;
-
-    // If the current calculated max charging current does not differ more than 1.0 A compared
-    // to the cached max charging current nothing will be changed.
-    if let Some(cached_max_charging_current) = charging_point_state.get_max_current()
-        && cached_max_charging_current - limit < 1.0
-    {
-        info!("Max. charging current won't be changed because difference is < 1.0 A");
-        return Ok(());
-    }
-
-    charging_point_state.set_max_current(limit);
-
-    const CONNECTOR_ID: i32 = 1;
-    const CHARGING_PROFILE_ID: i32 = 1;
-    const CHARGING_SCHEDULE_START_PERIOD: i32 = 0;
-    const CHARGING_SCHEDULE_PERIOD_NUMBER_PHASES: Option<i32> = None;
+    static CHARGING_PROFILE_ID: i32 = 1;
+    static CHARGING_SCHEDULE_START_PERIOD: i32 = 0;
+    static CHARGING_SCHEDULE_PERIOD_NUMBER_PHASES: Option<i32> = None;
 
     let charging_profile = ChargingProfileBuilder::new(
         CHARGING_PROFILE_ID,
@@ -131,11 +102,7 @@ fn calculate_default_tx_profile(
     )
     .add_charging_schedule_period(
         CHARGING_SCHEDULE_START_PERIOD,
-        Decimal::from_f64_retain(limit)
-            .ok_or(CustomError::Common(
-                "Could not convert to Decimal!".to_owned(),
-            ))?
-            .round_dp(1),
+        charging_profile_max_current,
         CHARGING_SCHEDULE_PERIOD_NUMBER_PHASES,
     )
     .get();
@@ -160,6 +127,7 @@ fn calculate_default_tx_profile(
 mod tests {
     use awattar::awattar_mock::AwattarApiMock;
     use chrono::Utc;
+    use config::config;
     use fronius::{
         Data, FroniusMock, PowerFlowRealtimeData, PowerFlowRealtimeDataBody,
         PowerFlowRealtimeDataHeader, Site, Smartloads, Status,
@@ -254,6 +222,9 @@ mod tests {
                 electric_vehicle: config::Ev {
                     average_watt_hours_needed: 30000,
                 },
+                photo_voltaic: config::PhotoVoltaic {
+                    moving_window_size_in_minutes: 15,
+                },
             },
         )));
 
@@ -302,6 +273,9 @@ mod tests {
                 },
                 electric_vehicle: config::Ev {
                     average_watt_hours_needed: 30000,
+                },
+                photo_voltaic: config::PhotoVoltaic {
+                    moving_window_size_in_minutes: 15,
                 },
             },
         )));

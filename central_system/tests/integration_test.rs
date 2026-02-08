@@ -202,6 +202,9 @@ fn authorize_request() -> Result<(), Box<dyn Error>> {
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
         },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
+        },
     };
 
     let mut integration_test = common::IntegrationTest::new(config);
@@ -262,6 +265,9 @@ fn boot_notification() -> Result<(), Box<dyn Error>> {
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
         },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
+        },
     };
 
     let mut integration_test = common::IntegrationTest::new(config);
@@ -305,6 +311,9 @@ fn meter_values_request() -> Result<(), Box<dyn Error>> {
         },
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
+        },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
         },
     };
 
@@ -383,6 +392,9 @@ fn start_transaction_blocked() -> Result<(), Box<dyn Error>> {
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
         },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
+        },
     };
 
     let mut integration_test = common::IntegrationTest::new(config);
@@ -447,6 +459,9 @@ fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
         },
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
+        },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
         },
     };
 
@@ -517,6 +532,9 @@ fn charging_status_notification() -> Result<(), Box<dyn Error>> {
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
         },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
+        },
     };
 
     let mut integration_test = common::IntegrationTest::new(config);
@@ -570,6 +588,9 @@ fn stop_transaction_blocked() -> Result<(), Box<dyn Error>> {
         },
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
+        },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
         },
     };
 
@@ -641,6 +662,9 @@ fn heartbeat() -> Result<(), Box<dyn Error>> {
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
         },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
+        },
     };
 
     let mut integration_test = common::IntegrationTest::new(config);
@@ -699,6 +723,9 @@ fn available_status_notification() -> Result<(), Box<dyn Error>> {
         },
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
+        },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
         },
     };
 
@@ -759,6 +786,9 @@ fn suspendedev_status_notification() -> Result<(), Box<dyn Error>> {
         },
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
+        },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
         },
     };
 
@@ -825,6 +855,9 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
         },
         electric_vehicle: config::Ev {
             average_watt_hours_needed: 0,
+        },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
         },
     };
 

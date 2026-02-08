@@ -3,9 +3,11 @@ use awattar::AwattarApi;
 use fronius::FroniusApi;
 use log::info;
 
+use std::sync::Arc;
+
 use ocpp::{
-    AuthorizeRequest, ChargePointState, ChargingProfilePurposeType, MessageBuilder,
-    MessageTypeName, clear_charging_profile_builder::ClearChargingProfileBuilder,
+    AuthorizeRequest, ChargePointState, ChargingProfilePurposeType, CustomError, Decimal,
+    MessageBuilder, MessageTypeName, clear_charging_profile_builder::ClearChargingProfileBuilder,
 };
 
 use crate::hooks::CONNECTOR_ID;
@@ -57,7 +59,32 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
         if !charge_point_state.get_running_transaction_ids().is_empty() {
             clear_smart_charging_tx_charging_profile(charge_point_state)?;
         } else {
-            self.calculate_grid_based_smart_charging_tx_profile(charge_point_state)?;
+            let max_charging_current = self.get_updated_max_charging_current(charge_point_state)?;
+            self.calculate_grid_based_smart_charging_tx_profile(
+                charge_point_state,
+                max_charging_current,
+            )?;
+
+            let possible_charging_current = self.calculate_power_flow_realtime_data(
+                charge_point_state,
+                Arc::clone(&self.fronius_api),
+            );
+
+            if let Some(possible_charging_current) = possible_charging_current
+                && possible_charging_current > self.config.charging_point.minimum_charging_current
+            {
+                let possible_charging_current_decimal =
+                    Decimal::from_f64_retain(possible_charging_current)
+                        .ok_or(CustomError::Common(
+                            "Could not convert possible charging current into decimal".to_string(),
+                        ))?
+                        .round_dp(1);
+
+                self.calculate_pv_tx_profile(
+                    charge_point_state,
+                    possible_charging_current_decimal,
+                )?;
+            }
         }
 
         Ok(())
