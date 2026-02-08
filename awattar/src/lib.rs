@@ -335,6 +335,9 @@ mod tests {
             electric_vehicle: config::Ev {
                 average_watt_hours_needed: 30000,
             },
+            photo_voltaic: config::PhotoVoltaic {
+                moving_window_size_in_minutes: 15
+            }
         };
 
         let cheapest_period = awattar_api_connector

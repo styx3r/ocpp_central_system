@@ -12,6 +12,9 @@ base_url = "https://api.awattar.at/v1/marketdata"
 # Average Wh needed to charge from 20% to 80%
 average_watt_hours_needed = 30000
 
+[photo_voltaic]
+moving_window_size_in_minutes = 15
+
 [[id_tags]]
 id = ""
 smart_charging = false

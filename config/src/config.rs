@@ -8,7 +8,8 @@ pub struct Config {
     pub log_directory: String,
     pub fronius: Fronius,
     pub awattar: Awattar,
-    pub electric_vehicle: Ev
+    pub electric_vehicle: Ev,
+    pub photo_voltaic: PhotoVoltaic
 }
 
 #[derive(Deserialize, Clone)]
@@ -59,4 +60,9 @@ pub struct Awattar {
 #[derive(Deserialize, Debug, Clone)]
 pub struct Ev {
     pub average_watt_hours_needed: u64
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct PhotoVoltaic {
+    pub moving_window_size_in_minutes: i64
 }
