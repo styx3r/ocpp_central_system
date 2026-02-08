@@ -14,13 +14,13 @@ use rust_ocpp::v2_0_1::messages::{log_status_notification, security_event_notifi
 
 use crate::{
     ChargePointState, OcppAuthorizationHook, OcppMeterValuesHook, OcppStatusNotificationHook,
-    RequestToSend,
     builders::{
         MessageBuilder, change_configuration_builder::ChangeConfigurationBuilder,
         charging_profile_builder::ChargingProfileBuilder,
         clear_charging_profile_builder::ClearChargingProfileBuilder,
         trigger_message_builder::TriggerMessageBuilder,
     },
+    charge_point_state::RequestToSend,
     handlers::{
         authorize_handler::handle_authorize_request,
         boot_notification_handler::handle_boot_notification_request,
@@ -215,9 +215,10 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
             payload: clear_charging_profile_request,
         });
 
-        let (uuid, status_notification_request) = TriggerMessageBuilder::new(MessageTrigger::StatusNotification, None)
-            .build()
-            .serialize()?;
+        let (uuid, status_notification_request) =
+            TriggerMessageBuilder::new(MessageTrigger::StatusNotification, None)
+                .build()
+                .serialize()?;
 
         charge_point_state.requests_to_send.push(RequestToSend {
             message_type: MessageTypeName::TriggerMessage,

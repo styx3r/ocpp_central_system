@@ -2,7 +2,7 @@ use rust_ocpp::v1_6::messages::start_transaction;
 use rust_ocpp::v1_6::types::{AuthorizationStatus, IdTagInfo};
 
 use crate::ocpp_types::CustomError;
-use crate::{ChargePointState, Transaction};
+use crate::{ChargePointState, charge_point_state::Transaction};
 use config::config::IdTag;
 
 //------------------------------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 mod builders;
+mod charge_point_state;
 mod handlers;
 mod ocpp_central_system;
 mod ocpp_types;
@@ -6,11 +7,11 @@ mod visitor;
 
 use log::{debug, error, info, trace};
 use rusqlite::{Connection, Result};
-use rust_ocpp::v1_6::types::ChargingProfile;
 use std::process::exit;
 use std::{error::Error, net::TcpListener};
 use tungstenite::{Utf8Bytes, accept};
 
+pub use crate::charge_point_state::*;
 use config::config::Config;
 pub use ocpp_types::MessageTypeName;
 
@@ -61,161 +62,6 @@ pub trait OcppAuthorizationHook {
         authorization_request: &AuthorizeRequest,
         charge_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>>;
-}
-
-//-------------------------------------------------------------------------------------------------
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Transaction {
-    pub id_tag: Option<String>,
-    pub transaction_id: i32,
-    pub meter_value_start: i32,
-    pub meter_value_stop: i32,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct RequestToSend {
-    pub uuid: String,
-    pub message_type: MessageTypeName,
-    pub payload: String,
-}
-
-#[derive(Default, Clone)]
-pub struct ChargePointState {
-    charge_point_status: Option<ChargePointStatus>,
-
-    latest_cos_phi: Option<f64>,
-    latest_power: Option<f64>,
-    latest_current: Option<f64>,
-    latest_voltage: Option<f64>,
-    max_current: Option<f64>,
-
-    requests_to_send: Vec<RequestToSend>,
-    requests_awaiting_confirmation: Vec<RequestToSend>,
-    running_transactions: Vec<Transaction>,
-
-    remote_start_transaction_id_tags: Vec<String>,
-
-    smart_charging: bool,
-    grid_based_smart_charging_profile: Option<ChargingProfile>,
-
-    pv_overproduction: Vec<f64>,
-}
-
-impl ChargePointState {
-    pub fn new(cos_phi: f64, power: f64, current: f64, voltage: f64) -> Self {
-        Self {
-            charge_point_status: None,
-            latest_cos_phi: Some(cos_phi),
-            latest_power: Some(power),
-            latest_current: Some(current),
-            latest_voltage: Some(voltage),
-            max_current: None,
-            requests_to_send: vec![],
-            requests_awaiting_confirmation: vec![],
-            running_transactions: vec![],
-            remote_start_transaction_id_tags: vec![],
-            smart_charging: false,
-            grid_based_smart_charging_profile: None,
-            pv_overproduction: vec![],
-        }
-    }
-
-    pub fn get_charge_point_status(&self) -> &Option<ChargePointStatus> {
-        &self.charge_point_status
-    }
-
-    pub fn get_latest_cos_phi(&self) -> Option<f64> {
-        self.latest_cos_phi
-    }
-
-    pub fn get_latest_power(&self) -> Option<f64> {
-        self.latest_power
-    }
-
-    pub fn get_latest_current(&self) -> Option<f64> {
-        self.latest_current
-    }
-
-    pub fn get_latest_voltage(&self) -> Option<f64> {
-        self.latest_voltage
-    }
-
-    pub fn get_max_current(&self) -> Option<f64> {
-        self.max_current
-    }
-
-    pub fn get_requests_to_send(&self) -> &Vec<RequestToSend> {
-        &self.requests_to_send
-    }
-
-    pub fn get_remote_start_transaction_id_tags(&self) -> &Vec<String> {
-        &self.remote_start_transaction_id_tags
-    }
-
-    pub fn get_running_transaction_ids(&self) -> &Vec<Transaction> {
-        &self.running_transactions
-    }
-
-    pub fn get_smart_charging(&self) -> bool {
-        self.smart_charging
-    }
-
-    pub fn get_grid_based_smart_charging_profile(&self) -> &Option<ChargingProfile> {
-        &self.grid_based_smart_charging_profile
-    }
-
-    pub fn get_pv_overproduction(&self) -> &Vec<f64> {
-        &self.pv_overproduction
-    }
-
-    pub fn set_charge_point_status(&mut self, status: ChargePointStatus) {
-        self.charge_point_status = Some(status);
-    }
-
-    pub fn set_latest_cos_phi(&mut self, cos_phi: f64) {
-        self.latest_cos_phi = Some(cos_phi);
-    }
-
-    pub fn set_max_current(&mut self, max_current: f64) {
-        self.max_current = Some(max_current);
-    }
-
-    pub fn add_request_to_send(&mut self, request_to_send: RequestToSend) {
-        self.requests_to_send.push(request_to_send);
-    }
-
-    pub fn add_remote_transaction_id_tag(&mut self, id_tag: String) {
-        self.remote_start_transaction_id_tags.push(id_tag);
-    }
-
-    pub fn add_pv_overproduction(&mut self, overproduction: f64) {
-        self.pv_overproduction.push(overproduction);
-    }
-
-    pub fn clear_remote_start_transaction_id_tags(&mut self) {
-        self.remote_start_transaction_id_tags.clear();
-    }
-
-    pub fn remove_first_element_pv_overproduction(&mut self) {
-        self.pv_overproduction.remove(0);
-    }
-
-    pub fn enable_smart_charging(&mut self) {
-        self.smart_charging = true;
-    }
-
-    pub fn disable_smart_charging(&mut self) {
-        self.smart_charging = false;
-        self.grid_based_smart_charging_profile = None;
-    }
-
-    pub fn set_grid_based_smart_charging_profile(
-        &mut self,
-        grid_based_smart_charging_profile: &ChargingProfile,
-    ) {
-        self.grid_based_smart_charging_profile = Some(grid_based_smart_charging_profile.clone());
-    }
 }
 
 //-------------------------------------------------------------------------------------------------

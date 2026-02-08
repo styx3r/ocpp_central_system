@@ -16,54 +16,94 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
 ) -> Result<meter_values::MeterValuesResponse, CustomError> {
     info!("Received {}", MessageTypeName::MeterValues);
 
+    let mut current_import: Option<f64> = None;
+    let mut power_active_import: Option<f64> = None;
     let mut system_voltage: Option<f64> = None;
     for meter_value in &meter_values_request.meter_value {
         for sampled_value in &meter_value.sampled_value {
             match sampled_value.measurand {
-                Some(rust_ocpp::v1_6::types::Measurand::CurrentOffered) => {
-                    charge_point_state.latest_current = sampled_value.value.parse::<f64>().ok();
+                Some(rust_ocpp::v1_6::types::Measurand::CurrentImport) => {
+                    match (current_import, sampled_value.value.parse::<f64>()) {
+                        (None, Ok(v)) => {
+                            current_import = Some(v);
+                        }
+                        (Some(current_import_measurand), Ok(v)) => {
+                            current_import = Some(current_import_measurand + v);
+                        }
+                        _ => {}
+                    };
                 }
-                Some(rust_ocpp::v1_6::types::Measurand::PowerOffered) => {
-                    charge_point_state.latest_power = match sampled_value.value.parse::<f64>() {
-                        Ok(v) => match sampled_value.unit {
-                            Some(UnitOfMeasure::Kw) => Some(v * 1000.0),
-                            _ => Some(v),
-                        },
-                        _ => None,
-                    }
+                Some(rust_ocpp::v1_6::types::Measurand::CurrentOffered) => {
+                    charge_point_state.measurand.current_offered =
+                        sampled_value.value.parse::<f64>().ok();
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::EnergyActiveImportRegister) => {
+                    charge_point_state.measurand.energy_active_import_register =
+                        sampled_value.value.parse::<f64>().ok();
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::EnergyReactiveImportRegister) => {
+                    charge_point_state.measurand.energy_reactive_import_register =
+                        sampled_value.value.parse::<f64>().ok();
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::Frequency) => {
+                    charge_point_state.measurand.frequency =
+                        sampled_value.value.parse::<f64>().ok();
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::PowerActiveImport) => {
+                    match (power_active_import, sampled_value.value.parse::<f64>()) {
+                        (None, Ok(v)) => {
+                            power_active_import = Some(v);
+                        }
+                        (Some(power_active_import_measurand), Ok(v)) => {
+                            power_active_import = Some(power_active_import_measurand + v);
+                        }
+                        _ => {}
+                    };
                 }
                 Some(rust_ocpp::v1_6::types::Measurand::Voltage) => {
                     match (system_voltage, sampled_value.value.parse::<f64>()) {
                         (None, Ok(v)) => {
                             system_voltage = Some(v);
                         }
-                        (Some(latest_voltage), Ok(v)) => {
-                            system_voltage = Some(latest_voltage + v);
+                        (Some(latest_voltage_measurand), Ok(v)) => {
+                            system_voltage = Some(latest_voltage_measurand + v);
                         }
                         _ => {}
                     };
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::PowerOffered) => {
+                    charge_point_state.measurand.power_offered =
+                        match sampled_value.value.parse::<f64>() {
+                            Ok(v) => match sampled_value.unit {
+                                Some(UnitOfMeasure::Kw) => Some(v * 1000.0),
+                                _ => Some(v),
+                            },
+                            _ => None,
+                        }
                 }
                 _ => {}
             }
         }
     }
 
-    charge_point_state.latest_voltage = system_voltage;
+    charge_point_state.measurand.current_import = current_import;
+    charge_point_state.measurand.power_active_import = power_active_import;
+    charge_point_state.measurand.voltage = system_voltage;
 
-    if let Some(latest_current) = charge_point_state.latest_current
-        && let Some(latest_power) = charge_point_state.latest_power
-        && let Some(latest_voltage) = charge_point_state.latest_voltage
-        && latest_power != 0.0
-        && latest_voltage != 0.0
-        && latest_current != 0.0
+    if let Some(current_offered) = charge_point_state.measurand.current_offered
+        && let Some(power_offered) = charge_point_state.measurand.power_offered
+        && let Some(voltage) = charge_point_state.measurand.voltage
+        && power_offered != 0.0
+        && voltage != 0.0
+        && current_offered != 0.0
     {
-        charge_point_state.latest_cos_phi = Some(latest_power / (latest_voltage * latest_current));
+        charge_point_state.latest_cos_phi = Some(power_offered / (voltage * current_offered));
 
         info!(
             "Calculated cos(phi): {} / ({} * {}) = {}",
-            latest_power,
-            latest_voltage,
-            latest_current,
+            power_offered,
+            voltage,
+            current_offered,
             charge_point_state.get_latest_cos_phi().unwrap_or(1.0)
         );
     }
@@ -245,9 +285,9 @@ mod tests {
 
         assert_eq!(response, meter_values::MeterValuesResponse {});
 
-        assert_eq!(charge_point_state.latest_current, Some(9.0));
-        assert_eq!(charge_point_state.latest_voltage, Some(695.9));
-        assert_eq!(charge_point_state.latest_power, Some(6255.9));
+        assert_eq!(charge_point_state.measurand.current_offered, Some(9.0));
+        assert_eq!(charge_point_state.measurand.voltage, Some(695.9));
+        assert_eq!(charge_point_state.measurand.power_offered, Some(6255.9));
         assert_eq!(charge_point_state.latest_cos_phi, Some(0.9988504095416009));
 
         assert_eq!(charge_point_state.max_current, None);

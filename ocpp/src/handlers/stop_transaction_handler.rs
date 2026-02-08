@@ -45,7 +45,7 @@ pub(crate) fn handle_stop_transaction_request(
 mod tests {
     use super::*;
     use rust_ocpp::v1_6::types::Reason;
-    use crate::Transaction;
+    use crate::charge_point_state::Transaction;
 
     static UNITTEST_ID_TAG: &str = "ID_TAG";
     static UNITTEST_TRANSACTION_ID: i32 = 1;

@@ -74,6 +74,11 @@ impl ChargingProfileBuilder {
         self
     }
 
+    pub fn set_stack_level(mut self, stack_level: u32) -> ChargingProfileBuilder {
+        self.charging_profile.stack_level = stack_level;
+        self
+    }
+
     pub fn add_charging_schedule_period(
         mut self,
         start_period: i32,
