@@ -98,7 +98,7 @@ mod tests {
             },
             &vec![IdTag {
                 id: UNITTEST_ID_TAG.to_owned(),
-                smart_charging: false
+                smart_charging_mode: config::config::SmartChargingMode::PVOverProductionAndGridBased
             }],
             &mut charge_point_state,
             Arc::clone(&hook)

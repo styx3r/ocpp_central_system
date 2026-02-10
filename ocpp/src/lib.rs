@@ -29,7 +29,7 @@ pub use builders::{
 pub use rust_ocpp::v1_6::messages::{
     authorize::AuthorizeRequest, status_notification::StatusNotificationRequest,
 };
-pub use rust_ocpp::v1_6::types::ChargePointStatus;
+pub use rust_ocpp::v1_6::types::{ChargePointStatus, ChargingProfile};
 
 pub trait OcppStatusNotificationHook {
     fn evaluate(

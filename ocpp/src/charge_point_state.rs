@@ -1,4 +1,5 @@
 use crate::MessageTypeName;
+use config::config::SmartChargingMode;
 use rust_ocpp::v1_6::types::{ChargePointStatus, ChargingProfile};
 
 //-------------------------------------------------------------------------------------------------
@@ -68,10 +69,10 @@ pub struct ChargePointState {
     pub(crate) running_transactions: Vec<Transaction>,
 
     /// Indicates if the ChargingPoint is currently used in SmartCharging mode.
-    smart_charging: bool,
+    smart_charging_mode: SmartChargingMode,
 
-    /// SmartCharging profile which uses power from the grid.
-    grid_based_smart_charging_profile: Option<ChargingProfile>,
+    /// Currently active ChargingProfiles
+    active_charging_profiles: Vec<ChargingProfile>,
 }
 
 impl ChargePointState {
@@ -93,8 +94,8 @@ impl ChargePointState {
             requests_to_send: vec![],
             requests_awaiting_confirmation: vec![],
             running_transactions: vec![],
-            smart_charging: false,
-            grid_based_smart_charging_profile: None,
+            smart_charging_mode: SmartChargingMode::Instant,
+            active_charging_profiles: vec![],
         }
     }
 
@@ -134,12 +135,30 @@ impl ChargePointState {
         &self.running_transactions
     }
 
-    pub fn get_smart_charging(&self) -> bool {
-        self.smart_charging
+    pub fn get_smart_charging_mode(&self) -> SmartChargingMode {
+        self.smart_charging_mode
     }
 
-    pub fn get_grid_based_smart_charging_profile(&self) -> &Option<ChargingProfile> {
-        &self.grid_based_smart_charging_profile
+    pub fn get_active_charging_profiles(&self) -> &Vec<ChargingProfile> {
+        &self.active_charging_profiles
+    }
+
+    pub fn get_active_charging_profile(
+        &self,
+        charging_profile_id: i32,
+    ) -> Option<&ChargingProfile> {
+        self.active_charging_profiles
+            .iter()
+            .find(|&charging_profile| charging_profile.charging_profile_id == charging_profile_id)
+    }
+
+    pub fn add_charging_profile(&mut self, charging_profile: &ChargingProfile) {
+        self.active_charging_profiles.push(charging_profile.clone());
+    }
+
+    pub fn remove_charging_profile(&mut self, charging_profile_id: i32) {
+        self.active_charging_profiles
+            .retain(|charging_profile| charging_profile.charging_profile_id != charging_profile_id);
     }
 
     pub fn set_charge_point_status(&mut self, status: ChargePointStatus) {
@@ -158,8 +177,8 @@ impl ChargePointState {
         self.requests_to_send.push(request_to_send);
     }
 
-    pub fn enable_smart_charging(&mut self) {
-        self.smart_charging = true;
+    pub fn set_smart_charging_mode(&mut self, mode: SmartChargingMode) {
+        self.smart_charging_mode = mode;
     }
 
     pub fn disable_smart_charging(&mut self) {
@@ -169,14 +188,6 @@ impl ChargePointState {
         self.measurand.energy_reactive_import_register = None;
         self.measurand.power_active_import = None;
 
-        self.smart_charging = false;
-        self.grid_based_smart_charging_profile = None;
-    }
-
-    pub fn set_grid_based_smart_charging_profile(
-        &mut self,
-        grid_based_smart_charging_profile: &ChargingProfile,
-    ) {
-        self.grid_based_smart_charging_profile = Some(grid_based_smart_charging_profile.clone());
+        self.smart_charging_mode = SmartChargingMode::Instant;
     }
 }
