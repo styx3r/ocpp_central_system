@@ -9,14 +9,38 @@ use ocpp::{
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::{
-    OcppHooks,
-    hooks::{CONNECTOR_ID, TX_CHARGING_PROFILE_ID},
-};
+use crate::{OcppHooks, hooks::CONNECTOR_ID};
 
 //-------------------------------------------------------------------------------------------------
 
 static BATTERY_BLOCKING_TIME_IN_HOURS: u64 = 12;
+
+//-------------------------------------------------------------------------------------------------
+
+fn clear_tx_charging_profiles(
+    charge_point_state: &mut ChargePointState,
+    charging_profile_id: i32,
+    connector_id: i32,
+    charging_profile_purpose_type: ChargingProfilePurposeType,
+    stack_level: u32,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (uuid, clear_charging_profile) = ClearChargingProfileBuilder::new(
+        Some(charging_profile_id),
+        Some(connector_id),
+        Some(charging_profile_purpose_type),
+        Some(stack_level as i32),
+    )
+    .build()
+    .serialize()?;
+
+    charge_point_state.add_request_to_send(ocpp::RequestToSend {
+        uuid: uuid.clone(),
+        message_type: MessageTypeName::ClearChargingProfile,
+        payload: clear_charging_profile,
+    });
+
+    Ok(())
+}
 
 //-------------------------------------------------------------------------------------------------
 
@@ -25,23 +49,17 @@ fn unblock_battery_and_clear_tx_profiles<T: FroniusApi>(
     fronius_api: Arc<Mutex<T>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     fronius_api.lock().unwrap().fully_unblock_battery()?;
-    if charge_point_state.get_smart_charging() {
-        let (uuid, clear_charging_profile) = ClearChargingProfileBuilder::new(
-            Some(TX_CHARGING_PROFILE_ID),
-            Some(CONNECTOR_ID),
-            Some(ChargingProfilePurposeType::TxProfile),
-            Some(0),
-        )
-        .build()
-        .serialize()?;
-
-        charge_point_state.add_request_to_send(ocpp::RequestToSend {
-            uuid: uuid.clone(),
-            message_type: MessageTypeName::ClearChargingProfile,
-            payload: clear_charging_profile,
-        });
-        charge_point_state.disable_smart_charging();
+    for charging_profile in charge_point_state.get_active_charging_profiles().clone() {
+        clear_tx_charging_profiles(
+            charge_point_state,
+            charging_profile.charging_profile_id,
+            CONNECTOR_ID,
+            charging_profile.charging_profile_purpose,
+            charging_profile.stack_level,
+        )?
     }
+
+    charge_point_state.disable_smart_charging();
 
     Ok(())
 }
@@ -79,7 +97,13 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
             },
         );
 
-        let unblock_battery = Box::new(unblock_battery_and_clear_tx_profiles);
+        let unblock_battery = Box::new(
+            |_: &mut ChargePointState,
+             fronius_api: Arc<Mutex<T>>|
+             -> Result<(), Box<dyn std::error::Error>> {
+                fronius_api.lock().unwrap().fully_unblock_battery()
+            },
+        );
 
         let mut state_transitions: Vec<(
             ChargePointStatus,
@@ -100,37 +124,66 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
             (
                 ChargePointStatus::Preparing,
                 vec![
-                    (ChargePointStatus::Available, unblock_battery.clone()),
+                    (
+                        ChargePointStatus::Available,
+                        Box::new(unblock_battery_and_clear_tx_profiles),
+                    ),
                     (ChargePointStatus::Charging, block_battery.clone()),
-                    (ChargePointStatus::Finishing, unblock_battery.clone()),
+                    (
+                        ChargePointStatus::Finishing,
+                        Box::new(unblock_battery_and_clear_tx_profiles),
+                    ),
                 ],
             ),
             (
                 ChargePointStatus::Charging,
                 vec![
-                    (ChargePointStatus::Available, unblock_battery.clone()),
+                    (
+                        ChargePointStatus::Available,
+                        Box::new(unblock_battery_and_clear_tx_profiles),
+                    ),
                     (ChargePointStatus::SuspendedEV, unblock_battery.clone()),
-                    (ChargePointStatus::Finishing, unblock_battery.clone()),
+                    (ChargePointStatus::SuspendedEVSE, unblock_battery.clone()),
+                    (
+                        ChargePointStatus::Finishing,
+                        Box::new(unblock_battery_and_clear_tx_profiles),
+                    ),
                 ],
             ),
             (
                 ChargePointStatus::SuspendedEV,
                 vec![
-                    (ChargePointStatus::Available, unblock_battery.clone()),
+                    (
+                        ChargePointStatus::Available,
+                        Box::new(unblock_battery_and_clear_tx_profiles),
+                    ),
                     (ChargePointStatus::Charging, block_battery.clone()),
-                    (ChargePointStatus::Finishing, unblock_battery.clone()),
+                    (
+                        ChargePointStatus::Finishing,
+                        Box::new(unblock_battery_and_clear_tx_profiles),
+                    ),
                 ],
             ),
             (
                 ChargePointStatus::SuspendedEVSE,
                 vec![
-                    (ChargePointStatus::Available, unblock_battery.clone()),
-                    (ChargePointStatus::Finishing, unblock_battery.clone()),
+                    (
+                        ChargePointStatus::Available,
+                        Box::new(unblock_battery_and_clear_tx_profiles),
+                    ),
+                    (ChargePointStatus::Charging, block_battery.clone()),
+                    (
+                        ChargePointStatus::Finishing,
+                        Box::new(unblock_battery_and_clear_tx_profiles),
+                    ),
                 ],
             ),
             (
                 ChargePointStatus::Finishing,
-                vec![(ChargePointStatus::Available, unblock_battery.clone())],
+                vec![(
+                    ChargePointStatus::Available,
+                    Box::new(unblock_battery_and_clear_tx_profiles),
+                )],
             ),
         ];
 

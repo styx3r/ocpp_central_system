@@ -1,20 +1,24 @@
 use crate::OcppHooks;
 use awattar::AwattarApi;
+use config::config::SmartChargingMode;
 use fronius::FroniusApi;
 use log::info;
 
-use std::sync::Arc;
-
 use ocpp::{
-    AuthorizeRequest, ChargePointState, ChargingProfilePurposeType, CustomError, Decimal,
-    MessageBuilder, MessageTypeName, clear_charging_profile_builder::ClearChargingProfileBuilder,
+    AuthorizeRequest, ChargePointState, ChargingProfileKindType, ChargingProfilePurposeType,
+    ChargingRateUnitType, CustomError, Decimal, MessageBuilder, MessageTypeName, RequestToSend,
+    charging_profile_builder::ChargingProfileBuilder,
+    clear_charging_profile_builder::ClearChargingProfileBuilder,
+    set_charging_profile_builder::SetChargingProfileBuilder,
 };
 
-use crate::hooks::CONNECTOR_ID;
+use chrono::Utc;
+
+use crate::hooks::{CONNECTOR_ID, TX_PV_PREPARATION_CHARGING_PROFILE_ID};
 
 //-------------------------------------------------------------------------------------------------
 
-fn clear_smart_charging_tx_charging_profile(
+fn clear_tx_charging_profiles(
     charge_point_state: &mut ChargePointState,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Clearing TxChargingProfiles!");
@@ -22,7 +26,7 @@ fn clear_smart_charging_tx_charging_profile(
         None,
         Some(CONNECTOR_ID),
         Some(ChargingProfilePurposeType::TxProfile),
-        Some(0),
+        None,
     )
     .build()
     .serialize()?;
@@ -50,40 +54,53 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
             .config
             .id_tags
             .iter()
-            .find(|id_tag| id_tag.id == authorization_request.id_tag);
-
-        if id_tag.is_none() || !id_tag.unwrap().smart_charging {
-            return Ok(());
-        }
+            .find(|id_tag| id_tag.id == authorization_request.id_tag)
+            .ok_or(CustomError::Common(
+                "Given IdTag is not configured!".to_owned(),
+            ))?;
 
         if !charge_point_state.get_running_transaction_ids().is_empty() {
-            clear_smart_charging_tx_charging_profile(charge_point_state)?;
-        } else {
-            let max_charging_current = self.get_updated_max_charging_current(charge_point_state)?;
-            self.calculate_grid_based_smart_charging_tx_profile(
-                charge_point_state,
-                max_charging_current,
-            )?;
+            clear_tx_charging_profiles(charge_point_state)?;
+        }
 
-            let possible_charging_current = self.calculate_power_flow_realtime_data(
-                charge_point_state,
-                Arc::clone(&self.fronius_api),
-            );
+        match id_tag.smart_charging_mode {
+            SmartChargingMode::Instant => {}
+            SmartChargingMode::PVOverProductionAndGridBased => {
+                let max_charging_current =
+                    self.get_updated_max_charging_current(charge_point_state);
 
-            if let Some(possible_charging_current) = possible_charging_current
-                && possible_charging_current > self.config.charging_point.minimum_charging_current
-            {
-                let possible_charging_current_decimal =
-                    Decimal::from_f64_retain(possible_charging_current)
-                        .ok_or(CustomError::Common(
-                            "Could not convert possible charging current into decimal".to_string(),
-                        ))?
-                        .round_dp(1);
+                if max_charging_current.is_none() {
+                    return Ok(());
+                }
 
-                self.calculate_pv_tx_profile(
+                self.calculate_grid_based_smart_charging_tx_profile(
                     charge_point_state,
-                    possible_charging_current_decimal,
+                    max_charging_current.unwrap(),
                 )?;
+            }
+            SmartChargingMode::PVOverProduction => {
+                let start_timestamp = Utc::now();
+                let pv_over_production_profile = ChargingProfileBuilder::new(
+                    TX_PV_PREPARATION_CHARGING_PROFILE_ID,
+                    ChargingProfilePurposeType::TxProfile,
+                    ChargingProfileKindType::Absolute,
+                    ChargingRateUnitType::A,
+                )
+                .set_valid_from(start_timestamp)
+                .set_start_schedule_timestamp(start_timestamp)
+                .add_charging_schedule_period(0, Decimal::new(0, 0), None)
+                .get();
+
+                let (uuid, payload) =
+                    SetChargingProfileBuilder::new(CONNECTOR_ID, pv_over_production_profile)
+                        .build()
+                        .serialize()?;
+
+                charge_point_state.add_request_to_send(RequestToSend {
+                    uuid: uuid.clone(),
+                    message_type: MessageTypeName::SetChargingProfile,
+                    payload,
+                });
             }
         }
 

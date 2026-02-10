@@ -1,5 +1,6 @@
 use crate::OcppHooks;
 use awattar::AwattarApi;
+use config::config::SmartChargingMode;
 use fronius::FroniusApi;
 
 use std::sync::Arc;
@@ -12,9 +13,7 @@ use ocpp::{
     set_charging_profile_builder::SetChargingProfileBuilder,
 };
 
-//-------------------------------------------------------------------------------------------------
-
-static CONNECTOR_ID: i32 = 1;
+use crate::hooks::{CONNECTOR_ID, TX_PV_CHARGING_PROFILE_ID, TX_PV_CHARGING_STACK_LEVEL};
 
 //-------------------------------------------------------------------------------------------------
 
@@ -23,28 +22,33 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
         &mut self,
         charging_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let possible_charging_current = self.calculate_power_flow_realtime_data(
+        let possible_pv_charging_current = self.calculate_power_flow_realtime_data(
             charging_point_state,
             Arc::clone(&self.fronius_api),
         );
 
-        if let Some(_) = charging_point_state.get_latest_current_offered()
-            && let Some(_) = charging_point_state.get_latest_power_offered()
-            && let Some(_) = charging_point_state.get_latest_voltage()
-            && let Some(_) = charging_point_state.get_latest_cos_phi()
-        {
-            let charging_profile_max_current =
-                self.get_updated_max_charging_current(charging_point_state)?;
+        let charging_profile_max_current =
+            self.get_updated_max_charging_current(charging_point_state);
 
-            if !charging_point_state.get_smart_charging() {
+        if charging_profile_max_current.is_none() {
+            return Ok(());
+        }
+
+        let charging_profile_max_current = charging_profile_max_current.unwrap();
+        let smart_charging_mode = charging_point_state.get_smart_charging_mode();
+
+        match smart_charging_mode {
+            SmartChargingMode::Instant => {
                 calculate_default_tx_profile(charging_point_state, charging_profile_max_current)?;
-            } else if charging_point_state.get_smart_charging() {
-                if let Some(possible_charging_current) = possible_charging_current {
-                    if possible_charging_current
+            }
+            SmartChargingMode::PVOverProductionAndGridBased
+            | SmartChargingMode::PVOverProduction => {
+                if let Some(possible_pv_charging_current) = possible_pv_charging_current {
+                    if possible_pv_charging_current
                         > self.config.charging_point.minimum_charging_current
                     {
                         let possible_charging_current_decimal =
-                            Decimal::from_f64_retain(possible_charging_current)
+                            Decimal::from_f64_retain(possible_pv_charging_current)
                                 .ok_or(CustomError::Common(
                                     "Could not convert possible charging current into decimal"
                                         .to_string(),
@@ -55,12 +59,15 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
                             charging_point_state,
                             possible_charging_current_decimal,
                         )?;
-                    } else {
+                    } else if charging_point_state
+                        .get_active_charging_profile(TX_PV_CHARGING_PROFILE_ID)
+                        .is_some()
+                    {
                         let (uuid, clear_charging_profile) = ClearChargingProfileBuilder::new(
-                            Some(crate::hooks::TX_PV_CHARGING_PROFILE_ID),
+                            Some(TX_PV_CHARGING_PROFILE_ID),
                             Some(CONNECTOR_ID),
                             Some(ChargingProfilePurposeType::TxProfile),
-                            Some(crate::hooks::TX_PV_CHARGING_STACK_LEVEL as i32),
+                            Some(TX_PV_CHARGING_STACK_LEVEL as i32),
                         )
                         .build()
                         .serialize()?;
@@ -70,14 +77,18 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
                             message_type: MessageTypeName::ClearChargingProfile,
                             payload: clear_charging_profile,
                         });
+
+                        charging_point_state.remove_charging_profile(TX_PV_CHARGING_PROFILE_ID);
                     }
                 }
-
-                self.calculate_grid_based_smart_charging_tx_profile(
-                    charging_point_state,
-                    charging_profile_max_current,
-                )?;
             }
+        }
+
+        if smart_charging_mode == SmartChargingMode::PVOverProductionAndGridBased {
+            self.calculate_grid_based_smart_charging_tx_profile(
+                charging_point_state,
+                charging_profile_max_current,
+            )?;
         }
 
         Ok(())

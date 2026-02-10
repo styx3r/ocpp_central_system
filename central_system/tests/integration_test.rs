@@ -446,7 +446,7 @@ fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
         },
         id_tags: vec![config::IdTag {
             id: "VALID_ID_TAG".to_string(),
-            smart_charging: false,
+            smart_charging_mode: config::SmartChargingMode::Instant,
         }],
         log_directory: log_directory.to_owned(),
         fronius: config::Fronius {
@@ -842,7 +842,7 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
         },
         id_tags: vec![IdTag {
             id: GRID_BASED_SMART_CHARGING_ID.to_owned(),
-            smart_charging: true,
+            smart_charging_mode: config::SmartChargingMode::PVOverProductionAndGridBased,
         }],
         log_directory: log_directory.to_owned(),
         fronius: config::Fronius {
@@ -857,7 +857,7 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
             average_watt_hours_needed: 0,
         },
         photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
+            moving_window_size_in_minutes: 1,
         },
     };
 
@@ -1249,7 +1249,7 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
             message_id: 2,
             uuid: "".to_owned(),
             message_type: "ClearChargingProfile".to_owned(),
-            json: json!({"id": 2, "connectorId": 1, "chargingProfilePurpose": "TxProfile", "stackLevel": 0}),
+            json: json!({"connectorId": 1, "chargingProfilePurpose": "TxProfile", "id": 2, "stackLevel": 0}),
         },
     )?;
 

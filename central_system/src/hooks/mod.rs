@@ -4,6 +4,7 @@ mod status_notification_hook;
 
 use chrono::{DateTime, Duration, Utc};
 use config::config;
+use ::config::config::SmartChargingMode;
 use fronius::FroniusApi;
 
 use log::info;
@@ -20,7 +21,11 @@ use std::sync::{Arc, Mutex};
 
 //-------------------------------------------------------------------------------------------------
 
-static TX_PV_CHARGING_PROFILE_ID: i32 = 4;
+/// PV profile consists of two profiles. First profile which does not allow any power and the
+/// second profile which sets the allowed power.
+static TX_PV_PREPARATION_CHARGING_PROFILE_ID: i32 = 4;
+static TX_PV_CHARGING_PROFILE_ID: i32 = 5;
+/// Stack level for the second profile is one to be able to keep the first one.
 static TX_PV_CHARGING_STACK_LEVEL: u32 = 1;
 
 //-------------------------------------------------------------------------------------------------
@@ -49,8 +54,13 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
     fn get_updated_max_charging_current(
         &mut self,
         charge_point_state: &mut ChargePointState,
-    ) -> Result<Decimal, Box<dyn std::error::Error>> {
-        let limit = calculate_max_current(&self.config, charge_point_state)?;
+    ) -> Option<Decimal> {
+        let limit = calculate_max_current(&self.config, charge_point_state).ok();
+        if limit.is_none() {
+            return None;
+        }
+
+        let limit = limit.unwrap();
 
         // If the current calculated max charging current does not differ more than 1.0 A compared
         // to the cached max charging current nothing will be changed.
@@ -58,21 +68,16 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             && cached_max_charging_current - limit < 1.0
         {
             info!("Max. charging current won't be changed because difference is < 1.0 A");
-            return Ok(Decimal::from_f64_retain(cached_max_charging_current)
-                .ok_or(CustomError::Common(
-                    "Could not convert to Decimal!".to_owned(),
-                ))?
-                .round_dp(1));
+            return None;
         }
 
         charge_point_state.set_max_current(limit);
-        let charging_profile_max_current = Decimal::from_f64_retain(limit)
-            .ok_or(CustomError::Common(
-                "Could not convert to Decimal!".to_owned(),
-            ))?
-            .round_dp(1);
+        let charging_profile_max_current = Decimal::from_f64_retain(limit);
+        if charging_profile_max_current.is_none() {
+            return None;
+        }
 
-        Ok(charging_profile_max_current)
+        charging_profile_max_current
     }
 
     pub fn calculate_grid_based_smart_charging_tx_profile(
@@ -81,7 +86,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         charging_profile_max_current: Decimal,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let grid_based_charging_profile = if let Some(grid_based_smart_charging_profile) =
-            charge_point_state.get_grid_based_smart_charging_profile()
+            charge_point_state.get_active_charging_profile(TX_CHARGING_PROFILE_ID)
         {
             let mut grid_based_smart_charging_profile_handle =
                 grid_based_smart_charging_profile.clone();
@@ -132,8 +137,8 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             charging_profile
         };
 
-        charge_point_state.set_grid_based_smart_charging_profile(&grid_based_charging_profile);
-        charge_point_state.enable_smart_charging();
+        charge_point_state.add_charging_profile(&grid_based_charging_profile);
+        charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
 
         let (uuid, set_charging_profile_request) =
             SetChargingProfileBuilder::new(CONNECTOR_ID, grid_based_charging_profile)
@@ -170,6 +175,8 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         )
         .set_stack_level(TX_PV_CHARGING_STACK_LEVEL)
         .get();
+
+        charging_point_state.add_charging_profile(&charging_profile);
 
         let (uuid, set_charging_profile_request) =
             SetChargingProfileBuilder::new(CONNECTOR_ID, charging_profile)
