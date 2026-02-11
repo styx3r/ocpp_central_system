@@ -1,7 +1,7 @@
 mod common;
 
-use std::error::Error;
 use std::net::TcpStream;
+use std::{error::Error, vec};
 
 use awattar::Period;
 use chrono::{Duration, TimeDelta, Utc};
@@ -130,6 +130,42 @@ fn send_status_notification(
     Ok(())
 }
 
+fn default_config(websocket_port: u32, id_tags: Vec<IdTag>) -> config::Config {
+    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
+    config::Config {
+        websocket: config::Websocket {
+            ip: "127.0.0.1".to_owned(),
+            port: websocket_port,
+        },
+        charging_point: config::ChargePoint {
+            serial_number: "".to_owned(),
+            heartbeat_interval: 60,
+            max_charging_power: 11000.0,
+            default_system_voltage: 696.0,
+            default_current: 16.0,
+            default_cos_phi: 0.86,
+            minimum_charging_current: 6.0,
+            config_parameters: vec![],
+        },
+        id_tags,
+        log_directory: log_directory.to_owned(),
+        fronius: config::Fronius {
+            username: "TEST".into(),
+            password: "TEST".into(),
+            url: "127.0.0.1:8081".into(),
+        },
+        awattar: config::Awattar {
+            base_url: "".to_owned(),
+        },
+        electric_vehicle: config::Ev {
+            average_watt_hours_needed: 0,
+        },
+        photo_voltaic: config::PhotoVoltaic {
+            moving_window_size_in_minutes: 15,
+        },
+    }
+}
+
 //-------------------------------------------------------------------------------------------------
 
 static CHARGING_STATUS_NOTIFCATION: &str = r#"{
@@ -173,41 +209,8 @@ static SUSPENDEDEV_STATUS_NOTIFCATION: &str = r#"{
 
 #[test]
 fn authorize_request() -> Result<(), Box<dyn Error>> {
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8080,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
-        },
-    };
-
-    let mut integration_test = common::IntegrationTest::new(config);
+    let config = default_config(8080, vec![]);
+    let mut integration_test = common::IntegrationTest::new(config.clone());
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
 
@@ -228,7 +231,7 @@ fn authorize_request() -> Result<(), Box<dyn Error>> {
         _ => assert!(false),
     }
 
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
 
@@ -236,46 +239,13 @@ fn authorize_request() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn boot_notification() -> Result<(), Box<dyn Error>> {
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8081,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
-        },
-    };
-
-    let mut integration_test = common::IntegrationTest::new(config);
+    let config = default_config(8081, vec![]);
+    let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
 
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
 
@@ -283,41 +253,9 @@ fn boot_notification() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn meter_values_request() -> Result<(), Box<dyn Error>> {
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8082,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
-        },
-    };
+    let config = default_config(8082, vec![]);
 
-    let mut integration_test = common::IntegrationTest::new(config);
+    let mut integration_test = common::IntegrationTest::new(config.clone());
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
 
@@ -355,7 +293,7 @@ fn meter_values_request() -> Result<(), Box<dyn Error>> {
         _ => assert!(false),
     }
 
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
 
@@ -363,41 +301,8 @@ fn meter_values_request() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn start_transaction_blocked() -> Result<(), Box<dyn Error>> {
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8083,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
-        },
-    };
-
-    let mut integration_test = common::IntegrationTest::new(config);
+    let config = default_config(8083, vec![]);
+    let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -420,7 +325,7 @@ fn start_transaction_blocked() -> Result<(), Box<dyn Error>> {
         _ => assert!(false),
     }
 
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
 
@@ -428,44 +333,14 @@ fn start_transaction_blocked() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8084,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![config::IdTag {
+    let config = default_config(
+        8084,
+        vec![config::IdTag {
             id: "VALID_ID_TAG".to_string(),
             smart_charging_mode: config::SmartChargingMode::Instant,
         }],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
-        },
-    };
-
-    let mut integration_test = common::IntegrationTest::new(config);
+    );
+    let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -495,7 +370,7 @@ fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
         _ => assert!(false),
     }
 
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
 
@@ -503,41 +378,8 @@ fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn charging_status_notification() -> Result<(), Box<dyn Error>> {
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8085,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
-        },
-    };
-
-    let mut integration_test = common::IntegrationTest::new(config);
+    let config = default_config(8085, vec![]);
+    let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -552,7 +394,7 @@ fn charging_status_notification() -> Result<(), Box<dyn Error>> {
             .unwrap()
             .block_battery_for_duration_called
     );
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
 
@@ -560,41 +402,8 @@ fn charging_status_notification() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn stop_transaction_blocked() -> Result<(), Box<dyn Error>> {
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8086,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
-        },
-    };
-
-    let mut integration_test = common::IntegrationTest::new(config);
+    let config = default_config(8086, vec![]);
+    let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -625,7 +434,7 @@ fn stop_transaction_blocked() -> Result<(), Box<dyn Error>> {
         _ => assert!(false),
     }
 
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
 
@@ -633,41 +442,8 @@ fn stop_transaction_blocked() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn heartbeat() -> Result<(), Box<dyn Error>> {
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8087,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
-        },
-    };
-
-    let mut integration_test = common::IntegrationTest::new(config);
+    let config = default_config(8087, vec![]);
+    let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -687,7 +463,7 @@ fn heartbeat() -> Result<(), Box<dyn Error>> {
         _ => assert!(false),
     }
 
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
 
@@ -695,41 +471,8 @@ fn heartbeat() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn available_status_notification() -> Result<(), Box<dyn Error>> {
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8088,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
-        },
-    };
-
-    let mut integration_test = common::IntegrationTest::new(config);
+    let config = default_config(8088, vec![]);
+    let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -750,7 +493,7 @@ fn available_status_notification() -> Result<(), Box<dyn Error>> {
             .unwrap()
             .unblock_battery_called
     );
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
 
@@ -758,41 +501,8 @@ fn available_status_notification() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn suspendedev_status_notification() -> Result<(), Box<dyn Error>> {
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8089,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 15,
-        },
-    };
-
-    let mut integration_test = common::IntegrationTest::new(config);
+    let config = default_config(8089, vec![]);
+    let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -815,7 +525,7 @@ fn suspendedev_status_notification() -> Result<(), Box<dyn Error>> {
             .unwrap()
             .unblock_battery_called
     );
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
 
@@ -824,44 +534,15 @@ fn suspendedev_status_notification() -> Result<(), Box<dyn Error>> {
 #[test]
 fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
     static GRID_BASED_SMART_CHARGING_ID: &str = "GRID_BASED_SMART_CHARGING";
-    let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
-    let config = config::Config {
-        websocket: config::Websocket {
-            ip: "127.0.0.1".to_owned(),
-            port: 8090,
-        },
-        charging_point: config::ChargePoint {
-            serial_number: "".to_owned(),
-            heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
-            default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
-            config_parameters: vec![],
-        },
-        id_tags: vec![IdTag {
+    let config = default_config(
+        8090,
+        vec![IdTag {
             id: GRID_BASED_SMART_CHARGING_ID.to_owned(),
             smart_charging_mode: config::SmartChargingMode::PVOverProductionAndGridBased,
         }],
-        log_directory: log_directory.to_owned(),
-        fronius: config::Fronius {
-            username: "TEST".into(),
-            password: "TEST".into(),
-            url: "127.0.0.1:8081".into(),
-        },
-        awattar: config::Awattar {
-            base_url: "".to_owned(),
-        },
-        electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
-        },
-        photo_voltaic: config::PhotoVoltaic {
-            moving_window_size_in_minutes: 1,
-        },
-    };
+    );
 
-    let mut integration_test = common::IntegrationTest::new(config);
+    let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
     validate_initial_messages(&mut websocket)?;
@@ -1261,6 +942,6 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
             .unblock_battery_called
     );
 
-    integration_test.teardown(log_directory.as_str(), &mut websocket);
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
 }
