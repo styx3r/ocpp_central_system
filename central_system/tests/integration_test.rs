@@ -33,7 +33,7 @@ struct ExpectedJSONRequestFormat {
     json: serde_json::Value,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, PartialEq, Eq, Debug)]
 struct ExpectedJSONResponseFormat {
     message_id: u32,
     uuid: String,
@@ -60,6 +60,20 @@ fn validate_request_message(
     }
 
     Err("Message validation failed".into())
+}
+
+fn validate_response_message(
+    websocket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
+    expected_message: &ExpectedJSONResponseFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match serde_json::from_str::<ExpectedJSONResponseFormat>(websocket.read()?.to_text()?) {
+        Ok(response) => {
+            assert_eq!(response, *expected_message);
+        }
+        _ => assert!(false),
+    }
+
+    Ok(())
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -221,15 +235,14 @@ fn authorize_request() -> Result<(), Box<dyn Error>> {
         AUTHORIZE_REQUEST
     )))?;
 
-    let message = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(message.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(response.json, json!({"idTagInfo": { "status": "Blocked" }}));
-        }
-        _ => assert!(false),
-    }
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({"idTagInfo": { "status": "Blocked" }}),
+        },
+    )?;
 
     integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
@@ -283,15 +296,14 @@ fn meter_values_request() -> Result<(), Box<dyn Error>> {
         METER_VALUES_REQUEST
     )))?;
 
-    let message = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(message.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(response.json, json!({}));
-        }
-        _ => assert!(false),
-    }
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({}),
+        },
+    )?;
 
     integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
@@ -312,18 +324,14 @@ fn start_transaction_blocked() -> Result<(), Box<dyn Error>> {
         START_TRANSACTION_REQUEST_WITH_INVALID_ID
     )))?;
 
-    let message = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(message.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(
-                response.json,
-                json!({ "idTagInfo": { "status": "Invalid"}, "transactionId": 1 })
-            );
-        }
-        _ => assert!(false),
-    }
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({ "idTagInfo": { "status": "Invalid"}, "transactionId": 1 }),
+        },
+    )?;
 
     integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
@@ -357,18 +365,14 @@ fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
         START_TRANSACTION_REQUEST
     )))?;
 
-    let message = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(message.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(
-                response.json,
-                json!({ "idTagInfo": { "status": "Accepted"}, "transactionId": 1 })
-            );
-        }
-        _ => assert!(false),
-    }
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({ "idTagInfo": { "status": "Accepted"}, "transactionId": 1 }),
+        },
+    )?;
 
     integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
@@ -421,18 +425,14 @@ fn stop_transaction_blocked() -> Result<(), Box<dyn Error>> {
         STOP_TRANSACTION_REQUEST
     )))?;
 
-    let message = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(message.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(
-                response.json,
-                json!({ "idTagInfo": { "status": "Invalid" } })
-            );
-        }
-        _ => assert!(false),
-    }
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({ "idTagInfo": { "status": "Invalid" } }),
+        },
+    )?;
 
     integration_test.teardown(config.log_directory.as_str(), &mut websocket);
     Ok(())
@@ -568,18 +568,14 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
         json!({"idTag": GRID_BASED_SMART_CHARGING_ID})
     )))?;
 
-    let response_message = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(response_message.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(
-                response.json,
-                json!({ "idTagInfo": { "status": "Accepted" }})
-            );
-        }
-        _ => assert!(false),
-    }
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({"idTagInfo": { "status": "Accepted" }}),
+        },
+    )?;
 
     let set_charging_profile_message = websocket.read()?;
     match serde_json::from_str::<ExpectedJSONRequestFormat>(set_charging_profile_message.to_text()?)
@@ -702,18 +698,14 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
         })
     )))?;
 
-    let start_transaction_response = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(start_transaction_response.to_text()?)
-    {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(
-                response.json,
-                json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1})
-            );
-        }
-        _ => assert!(false),
-    }
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
+        },
+    )?;
 
     send_status_notification(&mut websocket, CHARGING_STATUS_NOTIFCATION)?;
 
@@ -784,15 +776,14 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
         METER_VALUES_REQUEST
     )))?;
 
-    let message = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(message.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(response.json, json!({}));
-        }
-        _ => assert!(false),
-    }
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({}),
+        },
+    )?;
 
     let set_grid_based_smart_charging_profile_message = websocket.read()?;
     match serde_json::from_str::<ExpectedJSONRequestFormat>(
@@ -912,15 +903,14 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
         json!({"meterStop": 253580, "reason": "EVDisconnected", "timestamp": "2026-02-04T05:39:05Z", "transactionId": 1})
     )))?;
 
-    let stop_transaction_response = websocket.read()?;
-    match serde_json::from_str::<ExpectedJSONResponseFormat>(stop_transaction_response.to_text()?) {
-        Ok(response) => {
-            assert_eq!(response.message_id, 3);
-            assert_eq!(response.uuid, "12345");
-            assert_eq!(response.json, json!({"idTagInfo": {"status": "Accepted"}}));
-        }
-        _ => assert!(false),
-    }
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({"idTagInfo": {"status": "Accepted"}}),
+        },
+    )?;
 
     send_status_notification(&mut websocket, AVAILABLE_STATUS_NOTIFCATION)?;
 
