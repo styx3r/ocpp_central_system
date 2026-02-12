@@ -91,7 +91,7 @@ impl fmt::Display for MessageTypeName {
             MessageTypeName::Heartbeat => write!(f, "Heartbeat"),
             MessageTypeName::MeterValues => write!(f, "MeterValues"),
             MessageTypeName::StartTransaction => write!(f, "StartTransaction"),
-            MessageTypeName::StatusNotification => write!(f, "StausNotification"),
+            MessageTypeName::StatusNotification => write!(f, "StatusNotification"),
             MessageTypeName::StopTransaction => write!(f, "StopTransaction"),
             MessageTypeName::LogStatusNotification => write!(f, "LogStatusNotification"),
             MessageTypeName::SecurityEventNotification => write!(f, "SecurityEventNotification"),
