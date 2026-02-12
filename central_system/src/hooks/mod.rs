@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 
 //-------------------------------------------------------------------------------------------------
 
+static TX_GRID_BASED_CHARGING_PROFILE_ID: i32 = 2;
 /// PV profile consists of two profiles. First profile which does not allow any power and the
 /// second profile which sets the allowed power.
 static TX_PV_PREPARATION_CHARGING_PROFILE_ID: i32 = 4;
@@ -86,7 +87,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         charging_profile_max_current: Decimal,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let grid_based_charging_profile = if let Some(grid_based_smart_charging_profile) =
-            charge_point_state.get_active_charging_profile(TX_CHARGING_PROFILE_ID)
+            charge_point_state.get_active_charging_profile(TX_GRID_BASED_CHARGING_PROFILE_ID)
         {
             let mut grid_based_smart_charging_profile_handle =
                 grid_based_smart_charging_profile.clone();
@@ -117,7 +118,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
 
             let now = Utc::now();
             let charging_profile = ChargingProfileBuilder::new(
-                TX_CHARGING_PROFILE_ID,
+                TX_GRID_BASED_CHARGING_PROFILE_ID,
                 ChargingProfilePurposeType::TxProfile,
                 ChargingProfileKindType::Absolute,
                 ChargingRateUnitType::A,
@@ -266,7 +267,6 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
 //-------------------------------------------------------------------------------------------------
 
 static CONNECTOR_ID: i32 = 1;
-static TX_CHARGING_PROFILE_ID: i32 = 2;
 
 //-------------------------------------------------------------------------------------------------
 

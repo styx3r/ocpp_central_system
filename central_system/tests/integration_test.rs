@@ -1,13 +1,16 @@
 mod common;
 
-use std::net::TcpStream;
-use std::{error::Error, vec};
+use std::{collections::HashMap, error::Error, net::TcpStream, vec};
 
 use awattar::Period;
 use chrono::{Duration, TimeDelta, Utc};
 use config::config;
 
 use ::config::config::IdTag;
+use fronius::{
+    Data, PowerFlowRealtimeData, PowerFlowRealtimeDataBody, PowerFlowRealtimeDataHeader, Site,
+    Smartloads, Status,
+};
 use ocpp::Decimal;
 use serde::Deserialize;
 use serde_json::json;
@@ -61,6 +64,8 @@ fn validate_request_message(
 
     Err("Message validation failed".into())
 }
+
+//-------------------------------------------------------------------------------------------------
 
 fn validate_response_message(
     websocket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
@@ -123,6 +128,8 @@ fn validate_initial_messages(
     Ok(())
 }
 
+//-------------------------------------------------------------------------------------------------
+
 fn send_status_notification(
     websocket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
     payload: &str,
@@ -143,6 +150,8 @@ fn send_status_notification(
 
     Ok(())
 }
+
+//-------------------------------------------------------------------------------------------------
 
 fn default_config(websocket_port: u32, id_tags: Vec<IdTag>) -> config::Config {
     let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
@@ -178,6 +187,112 @@ fn default_config(websocket_port: u32, id_tags: Vec<IdTag>) -> config::Config {
             moving_window_size_in_minutes: 15,
         },
     }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+fn default_powerflow_realtime_data(
+    p_load: Option<f64>,
+    p_akku: Option<f64>,
+    p_pv: Option<f64>,
+) -> PowerFlowRealtimeData {
+    PowerFlowRealtimeData {
+        body: PowerFlowRealtimeDataBody {
+            data: Data {
+                inverters: HashMap::default(),
+                site: Site {
+                    mode: String::default(),
+                    battery_standby: false,
+                    backup_mode: false,
+                    p_grid: None,
+                    p_load,
+                    p_akku,
+                    p_pv,
+                    rel_self_consumption: None,
+                    rel_autonomy: None,
+                    meter_location: String::default(),
+                    e_day: None,
+                    e_year: None,
+                    e_total: None,
+                },
+                smartloads: Smartloads {
+                    ohmpilots: HashMap::default(),
+                    ohmpilot_ecos: HashMap::default(),
+                },
+                secondart_meters: HashMap::default(),
+                version: String::default(),
+            },
+        },
+        head: PowerFlowRealtimeDataHeader {
+            request_arguments: HashMap::default(),
+            status: Status {
+                code: 0,
+                reason: String::default(),
+                user_message: String::default(),
+            },
+            timestamp: Utc::now(),
+        },
+    }
+}
+
+fn build_meter_values_request(
+    voltage_per_phase: (f64, f64, f64),
+    power_offered: f64,
+    current_offered: f64,
+) -> serde_json::Value {
+    json!({
+        "connectorId": 1,
+        "transactionId": 1,
+        "meterValue": [
+        {
+            "timestamp": "2026-01-26T05:06:21Z",
+            "sampledValue": [
+                {
+                    "value": voltage_per_phase.0.to_string(),
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Voltage",
+                    "phase": "L1",
+                    "location": "Outlet",
+                    "unit": "V"
+                },
+                {
+                    "value": voltage_per_phase.1.to_string(),
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Voltage",
+                    "phase": "L2",
+                    "location": "Outlet",
+                    "unit": "V"
+                },
+                {
+                    "value": voltage_per_phase.2.to_string(),
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Voltage",
+                    "phase": "L3",
+                    "location": "Outlet",
+                    "unit": "V"
+                },
+                {
+                    "value": power_offered.to_string(),
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Power.Offered",
+                    "location": "Outlet",
+                    "unit": "kW"
+                },
+                {
+                    "value": current_offered.to_string(),
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Current.Offered",
+                    "location": "Outlet",
+                    "unit": "A"
+                }
+            ]
+        } ]
+    })
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -717,63 +832,10 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
             .block_battery_for_duration_called
     );
 
-    static METER_VALUES_REQUEST: &str = r#"{
-        "connectorId": 1,
-        "transactionId": 1,
-        "meterValue": [
-        {
-            "timestamp": "2026-01-26T05:06:21Z",
-            "sampledValue": [
-                {
-                    "value": "219",
-                    "context": "Sample.Periodic",
-                    "format": "Raw",
-                    "measurand": "Voltage",
-                    "phase": "L1",
-                    "location": "Outlet",
-                    "unit": "V"
-                },
-                {
-                    "value": "219",
-                    "context": "Sample.Periodic",
-                    "format": "Raw",
-                    "measurand": "Voltage",
-                    "phase": "L2",
-                    "location": "Outlet",
-                    "unit": "V"
-                },
-                {
-                    "value": "219",
-                    "context": "Sample.Periodic",
-                    "format": "Raw",
-                    "measurand": "Voltage",
-                    "phase": "L3",
-                    "location": "Outlet",
-                    "unit": "V"
-                },
-                {
-                    "value": "11000",
-                    "context": "Sample.Periodic",
-                    "format": "Raw",
-                    "measurand": "Power.Offered",
-                    "location": "Outlet",
-                    "unit": "kW"
-                },
-                {
-                    "value": "16",
-                    "context": "Sample.Periodic",
-                    "format": "Raw",
-                    "measurand": "Current.Offered",
-                    "location": "Outlet",
-                    "unit": "A"
-                }
-            ]
-        } ]
-    }"#;
-
+    // Sending updated MeterValues request to simulate a change of cos(phi)
     websocket.send(tungstenite::Message::text(format!(
         "[2,\"12345\",\"MeterValues\",{}]",
-        METER_VALUES_REQUEST
+        build_meter_values_request((180.0, 180.0, 180.0), 11.0, 5.0)
     )))?;
 
     validate_response_message(
@@ -923,6 +985,390 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
             json: json!({"connectorId": 1, "chargingProfilePurpose": "TxProfile", "id": 2, "stackLevel": 0}),
         },
     )?;
+
+    assert!(
+        integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .unblock_battery_called
+    );
+
+    integration_test.teardown(config.log_directory.as_str(), &mut websocket);
+    Ok(())
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#[test]
+fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
+    static GRID_BASED_SMART_CHARGING_ID: &str = "GRID_BASED_SMART_CHARGING";
+    let mut config = default_config(
+        8091,
+        vec![IdTag {
+            id: GRID_BASED_SMART_CHARGING_ID.to_owned(),
+            smart_charging_mode: config::SmartChargingMode::PVOverProductionAndGridBased,
+        }],
+    );
+
+    // Setting ChargingPoint interval to 60s and PV moving window size to 1minute for the sake of
+    // the test.
+    config.charging_point.heartbeat_interval = 60;
+    config.photo_voltaic.moving_window_size_in_minutes = 1;
+
+    let mut integration_test = common::IntegrationTest::new(config.clone());
+
+    let mut websocket = integration_test.setup();
+    validate_initial_messages(&mut websocket)?;
+
+    let now = Utc::now();
+    let start_timestamp = now + Duration::hours(1);
+    let end_timestamp = now + Duration::hours(5);
+
+    {
+        integration_test
+            .awattar_mock
+            .lock()
+            .unwrap()
+            .set_response(Period {
+                start_timestamp: start_timestamp.timestamp_millis(),
+                end_timestamp: end_timestamp.timestamp_millis(),
+                average_price: 20.0,
+            });
+
+        // Simulating a load of 400W where 100W are used to charge the battery.
+        // PV production is set to 14kW.
+        integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .power_flow_realtime_data = Some(default_powerflow_realtime_data(
+            Some(-300.0),
+            Some(-100.0),
+            Some(14000.0),
+        ));
+    }
+
+    send_status_notification(&mut websocket, AVAILABLE_STATUS_NOTIFCATION)?;
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"Authorize\",{}]",
+        json!({"idTag": GRID_BASED_SMART_CHARGING_ID})
+    )))?;
+
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({"idTagInfo": { "status": "Accepted" }}),
+        },
+    )?;
+
+    let set_charging_profile_message = websocket.read()?;
+    match serde_json::from_str::<ExpectedJSONRequestFormat>(set_charging_profile_message.to_text()?)
+    {
+        Ok(response) => {
+            assert_eq!(response.message_id, 2);
+            assert_eq!(response.message_type, "SetChargingProfile");
+
+            let set_charging_profile_request =
+                serde_json::from_value::<SetChargingProfileRequest>(response.json)?;
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_id,
+                2
+            );
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_purpose,
+                ChargingProfilePurposeType::TxProfile
+            );
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_kind,
+                ChargingProfileKindType::Absolute
+            );
+
+            assert!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_from
+                    .is_some()
+            );
+
+            assert!(
+                (set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_from
+                    .unwrap()
+                    - now)
+                    .abs()
+                    <= TimeDelta::milliseconds(100)
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_to
+                    .unwrap()
+                    .timestamp_millis(),
+                end_timestamp.timestamp_millis()
+            );
+
+            assert!(
+                (Duration::seconds(
+                    set_charging_profile_request
+                        .cs_charging_profiles
+                        .charging_schedule
+                        .duration
+                        .unwrap() as i64
+                ) - Duration::hours(5))
+                .abs()
+                    <= TimeDelta::seconds(1)
+            );
+
+            assert!(
+                (set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .start_schedule
+                    .unwrap()
+                    - now)
+                    .abs()
+                    <= TimeDelta::milliseconds(100)
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .charging_rate_unit,
+                ChargingRateUnitType::A
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .charging_schedule_period,
+                vec![
+                    ChargingSchedulePeriod {
+                        start_period: 0,
+                        limit: Decimal::new(0, 0),
+                        number_phases: None
+                    },
+                    ChargingSchedulePeriod {
+                        start_period: ((start_timestamp - now).num_seconds() - 1) as i32,
+                        limit: Decimal::new(16, 0),
+                        number_phases: None
+                    },
+                ]
+            );
+            websocket.send(tungstenite::Message::text(format!(
+                "[3,\"{}\",{{\"status\": \"Accepted\"}}]",
+                response.uuid
+            )))?;
+        }
+        _ => assert!(false),
+    }
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"StartTransaction\",{}]",
+        json!({
+            "connectorId": 1,
+            "idTag": GRID_BASED_SMART_CHARGING_ID,
+            "meterStart": 0,
+            "timestamp": "2026-01-18T14:09:24Z"
+        })
+    )))?;
+
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
+        },
+    )?;
+
+    send_status_notification(&mut websocket, CHARGING_STATUS_NOTIFCATION)?;
+
+    assert!(
+        integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .block_battery_for_duration_called
+    );
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"MeterValues\",{}]",
+        build_meter_values_request((219.0, 219.0, 219.0), 11.0, 16.0)
+    )))?;
+
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({}),
+        },
+    )?;
+
+    let set_grid_based_smart_charging_profile_message = websocket.read()?;
+    match serde_json::from_str::<ExpectedJSONRequestFormat>(
+        set_grid_based_smart_charging_profile_message.to_text()?,
+    ) {
+        Ok(response) => {
+            assert_eq!(response.message_id, 2);
+            assert_eq!(response.message_type, "SetChargingProfile");
+
+            let set_charging_profile_request =
+                serde_json::from_value::<SetChargingProfileRequest>(response.json)?;
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_id,
+                5
+            );
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .stack_level,
+                1
+            );
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_purpose,
+                ChargingProfilePurposeType::TxProfile
+            );
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_profile_kind,
+                ChargingProfileKindType::Relative
+            );
+
+            assert!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_from
+                    .is_none()
+            );
+
+            assert!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .valid_to
+                    .is_none()
+            );
+
+            assert!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .duration
+                    .is_none()
+            );
+
+            assert!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .start_schedule
+                    .is_none()
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .charging_rate_unit,
+                ChargingRateUnitType::A
+            );
+
+            assert_eq!(
+                set_charging_profile_request
+                    .cs_charging_profiles
+                    .charging_schedule
+                    .charging_schedule_period,
+                vec![ChargingSchedulePeriod {
+                    start_period: 0,
+                    limit: Decimal::new(16, 0),
+                    number_phases: None
+                }]
+            );
+
+            websocket.send(tungstenite::Message::text(format!(
+                "[3,\"{}\",{{\"status\": \"Accepted\"}}]",
+                response.uuid
+            )))?;
+        }
+        _ => assert!(false),
+    }
+
+    {
+        // Simulating a load of 400W where 100W are used to charge the battery.
+        // PV production is set to 1kW which is expected to clear the PV based ChargingProfile.
+        integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .power_flow_realtime_data = Some(default_powerflow_realtime_data(
+            Some(-300.0),
+            Some(-100.0),
+            Some(1000.0),
+        ));
+    }
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"MeterValues\",{}]",
+        build_meter_values_request((219.0, 219.0, 219.0), 11.0, 16.0)
+    )))?;
+
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({}),
+        },
+    )?;
+    let reques_uuid = validate_request_message(
+        &mut websocket,
+        &ExpectedJSONRequestFormat {
+            message_id: 2,
+            uuid: "".to_owned(),
+            message_type: "ClearChargingProfile".to_owned(),
+            json: json!({"connectorId": 1, "chargingProfilePurpose": "TxProfile", "id": 5, "stackLevel": 1}),
+        },
+    )?;
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[3,\"{}\",{{\"status\": \"Accepted\"}}]",
+        reques_uuid
+    )))?;
+
+    websocket.send(tungstenite::Message::text(format!(
+        "[2,\"12345\",\"StopTransaction\",{}]",
+        json!({"meterStop": 253580, "reason": "EVDisconnected", "timestamp": "2026-02-04T05:39:05Z", "transactionId": 1})
+    )))?;
+
+    validate_response_message(
+        &mut websocket,
+        &ExpectedJSONResponseFormat {
+            message_id: 3,
+            uuid: "12345".to_owned(),
+            json: json!({"idTagInfo": {"status": "Accepted"}}),
+        },
+    )?;
+
+    send_status_notification(&mut websocket, AVAILABLE_STATUS_NOTIFCATION)?;
 
     assert!(
         integration_test

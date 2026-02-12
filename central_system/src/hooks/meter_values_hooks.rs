@@ -30,16 +30,20 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
         let charging_profile_max_current =
             self.get_updated_max_charging_current(charging_point_state);
 
-        if charging_profile_max_current.is_none() {
+        if charging_profile_max_current.is_none() && possible_pv_charging_current.is_none() {
             return Ok(());
         }
 
-        let charging_profile_max_current = charging_profile_max_current.unwrap();
         let smart_charging_mode = charging_point_state.get_smart_charging_mode();
 
         match smart_charging_mode {
             SmartChargingMode::Instant => {
-                calculate_default_tx_profile(charging_point_state, charging_profile_max_current)?;
+                if let Some(charging_profile_max_current) = charging_profile_max_current {
+                    calculate_default_tx_profile(
+                        charging_point_state,
+                        charging_profile_max_current,
+                    )?;
+                }
             }
             SmartChargingMode::PVOverProductionAndGridBased
             | SmartChargingMode::PVOverProduction => {
@@ -47,13 +51,16 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
                     if possible_pv_charging_current
                         > self.config.charging_point.minimum_charging_current
                     {
-                        let possible_charging_current_decimal =
-                            Decimal::from_f64_retain(possible_pv_charging_current)
-                                .ok_or(CustomError::Common(
-                                    "Could not convert possible charging current into decimal"
-                                        .to_string(),
-                                ))?
-                                .round_dp(1);
+                        let possible_charging_current_decimal = Decimal::from_f64_retain(
+                            possible_pv_charging_current.clamp(
+                                self.config.charging_point.minimum_charging_current,
+                                self.config.charging_point.default_current,
+                            ),
+                        )
+                        .ok_or(CustomError::Common(
+                            "Could not convert possible charging current into decimal".to_string(),
+                        ))?
+                        .round_dp(1);
 
                         self.calculate_pv_tx_profile(
                             charging_point_state,
@@ -84,7 +91,9 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
             }
         }
 
-        if smart_charging_mode == SmartChargingMode::PVOverProductionAndGridBased {
+        if let Some(charging_profile_max_current) = charging_profile_max_current
+            && smart_charging_mode == SmartChargingMode::PVOverProductionAndGridBased
+        {
             self.calculate_grid_based_smart_charging_tx_profile(
                 charging_point_state,
                 charging_profile_max_current,
