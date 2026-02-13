@@ -66,7 +66,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         // If the current calculated max charging current does not differ more than 1.0 A compared
         // to the cached max charging current nothing will be changed.
         if let Some(cached_max_charging_current) = charge_point_state.get_max_current()
-            && cached_max_charging_current - limit < 1.0
+            && (cached_max_charging_current - limit).abs() < 1.0
         {
             info!("Max. charging current won't be changed because difference is < 1.0 A");
             return None;

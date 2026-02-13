@@ -152,13 +152,21 @@ mod tests {
         Data, FroniusMock, PowerFlowRealtimeData, PowerFlowRealtimeDataBody,
         PowerFlowRealtimeDataHeader, Site, Smartloads, Status,
     };
-    use ocpp::OcppMeterValuesHook;
+    use ocpp::{ChargingProfile, OcppMeterValuesHook};
+    use serde::de::DeserializeOwned;
     use std::{
         collections::HashMap,
         sync::{Arc, Mutex},
     };
 
     use super::*;
+    use rust_ocpp::v1_6::{
+        messages::{
+            clear_charging_profile::ClearChargingProfileRequest,
+            set_charging_profile::SetChargingProfileRequest,
+        },
+        types::{ChargingSchedule, ChargingSchedulePeriod},
+    };
 
     static UNITTEST_CHARGING_POINT_SERIAL: &str = "SERIAL_NUMBER";
 
@@ -209,43 +217,55 @@ mod tests {
         }
     }
 
+    fn test_config() -> config::Config {
+        config::Config {
+            websocket: config::Websocket {
+                ip: "127.0.0.1".to_owned(),
+                port: 8080,
+            },
+            charging_point: config::ChargePoint {
+                serial_number: UNITTEST_CHARGING_POINT_SERIAL.to_owned(),
+                heartbeat_interval: UNITTEST_HEARTBEAT_INTERVAL,
+                max_charging_power: UNITTEST_MAX_CHARGING_POWER,
+                default_system_voltage: UNITTEST_SYSTEM_VOLTAGE,
+                default_current: UNITTEST_DEFAULT_CURRENT,
+                default_cos_phi: UNITTEST_COS_PHI,
+                minimum_charging_current: UNITTEST_MINIMUM_CHARGING_CURRENT,
+                config_parameters: vec![],
+            },
+            id_tags: vec![],
+            log_directory: "".to_owned(),
+            fronius: config::Fronius {
+                username: "TEST".into(),
+                password: "TEST".into(),
+                url: "127.0.0.1:8081".into(),
+            },
+            awattar: config::Awattar {
+                base_url: "".to_owned(),
+            },
+            electric_vehicle: config::Ev {
+                average_watt_hours_needed: 30000,
+            },
+            photo_voltaic: config::PhotoVoltaic {
+                moving_window_size_in_minutes: 15,
+            },
+        }
+    }
+
+    fn parse_message_request<T: DeserializeOwned>(payload: &str) -> T {
+        let message_request =
+            serde_json::from_str::<(u32, String, String, serde_json::Value)>(payload)
+                .expect("Could not deserialize request");
+
+        serde_json::from_value::<T>(message_request.3).expect("Could not deserialize payload")
+    }
+
     #[test]
-    fn meter_values_request_empty() -> Result<(), Box<dyn std::error::Error>> {
+    fn empty_meter_values_request() -> Result<(), Box<dyn std::error::Error>> {
         let hook = Arc::new(Mutex::new(OcppHooks::new(
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
-            config::Config {
-                websocket: config::Websocket {
-                    ip: "127.0.0.1".to_owned(),
-                    port: 8080,
-                },
-                charging_point: config::ChargePoint {
-                    serial_number: UNITTEST_CHARGING_POINT_SERIAL.to_owned(),
-                    heartbeat_interval: UNITTEST_HEARTBEAT_INTERVAL,
-                    max_charging_power: UNITTEST_MAX_CHARGING_POWER,
-                    default_system_voltage: UNITTEST_SYSTEM_VOLTAGE,
-                    default_current: UNITTEST_DEFAULT_CURRENT,
-                    default_cos_phi: UNITTEST_COS_PHI,
-                    minimum_charging_current: UNITTEST_MINIMUM_CHARGING_CURRENT,
-                    config_parameters: vec![],
-                },
-                id_tags: vec![],
-                log_directory: "".to_owned(),
-                fronius: config::Fronius {
-                    username: "TEST".into(),
-                    password: "TEST".into(),
-                    url: "127.0.0.1:8081".into(),
-                },
-                awattar: config::Awattar {
-                    base_url: "".to_owned(),
-                },
-                electric_vehicle: config::Ev {
-                    average_watt_hours_needed: 30000,
-                },
-                photo_voltaic: config::PhotoVoltaic {
-                    moving_window_size_in_minutes: 15,
-                },
-            },
+            test_config(),
         )));
 
         hook.lock()
@@ -262,42 +282,12 @@ mod tests {
     }
 
     #[test]
-    fn meter_values_request() -> Result<(), Box<dyn std::error::Error>> {
+    fn valid_meter_values_request() -> Result<(), Box<dyn std::error::Error>> {
+        let config = test_config();
         let hook = Arc::new(Mutex::new(OcppHooks::new(
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
-            config::Config {
-                websocket: config::Websocket {
-                    ip: "127.0.0.1".to_owned(),
-                    port: 8080,
-                },
-                charging_point: config::ChargePoint {
-                    serial_number: UNITTEST_CHARGING_POINT_SERIAL.to_owned(),
-                    heartbeat_interval: UNITTEST_HEARTBEAT_INTERVAL,
-                    max_charging_power: UNITTEST_MAX_CHARGING_POWER,
-                    default_system_voltage: UNITTEST_SYSTEM_VOLTAGE,
-                    default_current: UNITTEST_DEFAULT_CURRENT,
-                    default_cos_phi: UNITTEST_COS_PHI,
-                    minimum_charging_current: UNITTEST_MINIMUM_CHARGING_CURRENT,
-                    config_parameters: vec![],
-                },
-                id_tags: vec![],
-                log_directory: "".to_owned(),
-                fronius: config::Fronius {
-                    username: "TEST".into(),
-                    password: "TEST".into(),
-                    url: "127.0.0.1:8081".into(),
-                },
-                awattar: config::Awattar {
-                    base_url: "".to_owned(),
-                },
-                electric_vehicle: config::Ev {
-                    average_watt_hours_needed: 30000,
-                },
-                photo_voltaic: config::PhotoVoltaic {
-                    moving_window_size_in_minutes: 15,
-                },
-            },
+            config.clone(),
         )));
 
         hook.lock()
@@ -307,7 +297,12 @@ mod tests {
             .unwrap()
             .power_flow_realtime_data = Some(default_powerflow_realtime_data());
 
-        let mut charge_point_state = ChargePointState::new(0.9988504095416009, 6255.9, 9.0, 695.9);
+        static COS_PHI: f64 = 0.9988504095416009;
+        static POWER: f64 = 6255.9;
+        static CURRENT: f64 = 9.0;
+        static VOLTAGE: f64 = 695.9;
+
+        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
         hook.lock().unwrap().evaluate(&mut charge_point_state)?;
 
         let request_to_send = charge_point_state.get_requests_to_send().first();
@@ -318,7 +313,584 @@ mod tests {
             MessageTypeName::SetChargingProfile
         );
 
-        assert_eq!(charge_point_state.get_max_current(), Some(15.0));
+        let set_charging_profile_request = parse_message_request::<SetChargingProfileRequest>(
+            request_to_send.unwrap().payload.as_str(),
+        );
+
+        static EXPECTED_INSTANT_PV_PROFILE_STACK_LEVEL: u32 = 0;
+        static EXPECTED_CURRENT_LIMIT: i64 = 15;
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .stack_level,
+            EXPECTED_INSTANT_PV_PROFILE_STACK_LEVEL
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_profile_kind,
+            ChargingProfileKindType::Relative
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_profile_purpose,
+            ChargingProfilePurposeType::TxDefaultProfile
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_rate_unit,
+            ChargingRateUnitType::A
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_schedule_period,
+            vec![ChargingSchedulePeriod {
+                start_period: 0,
+                limit: Decimal::new(EXPECTED_CURRENT_LIMIT, 0),
+                number_phases: None
+            }]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn no_power_flow_and_unchanged_max_charging_current() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let hook = Arc::new(Mutex::new(OcppHooks::new(
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::new(Mutex::new(AwattarApiMock::default())),
+            test_config(),
+        )));
+
+        static COS_PHI: f64 = 0.9988504095416009;
+        static POWER: f64 = 6255.9;
+        static CURRENT: f64 = 9.0;
+        static VOLTAGE: f64 = 695.9;
+
+        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        charge_point_state.set_max_current(15.0);
+
+        hook.lock().unwrap().evaluate(&mut charge_point_state)?;
+
+        assert!(charge_point_state.get_requests_to_send().is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn max_power_flow_and_unchanged_max_charging_current() -> Result<(), Box<dyn std::error::Error>>
+    {
+        // Setting minimum charging current to 1A.
+        let mut config = test_config();
+        config.charging_point.minimum_charging_current = 1.0;
+
+        // Setting intervals in a way that only ONE element is used as average
+        config.charging_point.heartbeat_interval = 60;
+        config.photo_voltaic.moving_window_size_in_minutes = 1;
+
+        let hook = Arc::new(Mutex::new(OcppHooks::new(
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::new(Mutex::new(AwattarApiMock::default())),
+            config.clone(),
+        )));
+
+        let mut power_flow_realtime_data = default_powerflow_realtime_data();
+        power_flow_realtime_data.body.data.site.p_pv = Some(14000.0);
+        power_flow_realtime_data.body.data.site.p_load = Some(-100.0);
+        power_flow_realtime_data.body.data.site.p_akku = Some(-100.0);
+
+        hook.lock()
+            .unwrap()
+            .fronius_api
+            .lock()
+            .unwrap()
+            .power_flow_realtime_data = Some(power_flow_realtime_data);
+
+        static COS_PHI: f64 = 0.9988504095416009;
+        static POWER: f64 = 6255.9;
+        static CURRENT: f64 = 9.0;
+        static VOLTAGE: f64 = 695.9;
+
+        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        charge_point_state.set_max_current(15.0);
+        charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
+
+        hook.lock().unwrap().evaluate(&mut charge_point_state)?;
+
+        let pv_charging_profile_request = charge_point_state.get_requests_to_send().first();
+
+        assert!(pv_charging_profile_request.is_some());
+        assert_eq!(
+            pv_charging_profile_request.unwrap().message_type,
+            MessageTypeName::SetChargingProfile
+        );
+
+        let set_charging_profile_request = parse_message_request::<SetChargingProfileRequest>(
+            pv_charging_profile_request.unwrap().payload.as_str(),
+        );
+
+        static EXPECTED_PV_CHARGING_PROFILE_STACK_LEVEL: u32 = 1;
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .stack_level,
+            EXPECTED_PV_CHARGING_PROFILE_STACK_LEVEL
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_profile_kind,
+            ChargingProfileKindType::Relative
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_profile_purpose,
+            ChargingProfilePurposeType::TxProfile
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_rate_unit,
+            ChargingRateUnitType::A
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_schedule_period,
+            vec![ChargingSchedulePeriod {
+                start_period: 0,
+                limit: Decimal::from_f64_retain(config.charging_point.default_current)
+                    .unwrap()
+                    .round_dp(1),
+                number_phases: None
+            }]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn max_power_flow_and_changed_max_charging_current() -> Result<(), Box<dyn std::error::Error>> {
+        // Setting minimum charging current to 1A.
+        let mut config = test_config();
+        config.charging_point.minimum_charging_current = 1.0;
+
+        // Setting intervals in a way that only ONE element is used as average
+        config.charging_point.heartbeat_interval = 60;
+        config.photo_voltaic.moving_window_size_in_minutes = 1;
+
+        let hook = Arc::new(Mutex::new(OcppHooks::new(
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::new(Mutex::new(AwattarApiMock::default())),
+            config.clone(),
+        )));
+
+        let mut power_flow_realtime_data = default_powerflow_realtime_data();
+        power_flow_realtime_data.body.data.site.p_pv = Some(14000.0);
+        power_flow_realtime_data.body.data.site.p_load = Some(-100.0);
+        power_flow_realtime_data.body.data.site.p_akku = Some(-100.0);
+
+        static PERIOD_START: i64 = 300;
+        static PERIOD_END: i64 = 500;
+        hook.lock()
+            .unwrap()
+            .awattar_api
+            .lock()
+            .unwrap()
+            .set_response(awattar::Period {
+                start_timestamp: PERIOD_START,
+                end_timestamp: PERIOD_END,
+                average_price: 20.0,
+            });
+
+        hook.lock()
+            .unwrap()
+            .fronius_api
+            .lock()
+            .unwrap()
+            .power_flow_realtime_data = Some(power_flow_realtime_data);
+
+        static COS_PHI: f64 = 0.9988504095416009;
+        static POWER: f64 = 6255.9;
+        static CURRENT: f64 = 9.0;
+        static VOLTAGE: f64 = 695.9;
+
+        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        charge_point_state.set_max_current(4.0);
+        charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
+        charge_point_state.add_charging_profile(&ChargingProfile {
+            charging_profile_id: 2,
+            transaction_id: None,
+            stack_level: 0,
+            charging_profile_purpose: ChargingProfilePurposeType::TxProfile,
+            charging_profile_kind: ChargingProfileKindType::Absolute,
+            recurrency_kind: None,
+            valid_from: None,
+            valid_to: None,
+            charging_schedule: ChargingSchedule {
+                duration: None,
+                start_schedule: None,
+                charging_rate_unit: ChargingRateUnitType::A,
+                charging_schedule_period: vec![
+                    ChargingSchedulePeriod {
+                        start_period: 0,
+                        limit: Decimal::new(0, 0),
+                        number_phases: None,
+                    },
+                    ChargingSchedulePeriod {
+                        start_period: PERIOD_START as i32,
+                        limit: Decimal::new(5, 0),
+                        number_phases: None,
+                    },
+                ],
+                min_charging_rate: None,
+            },
+        });
+
+        hook.lock().unwrap().evaluate(&mut charge_point_state)?;
+
+        let mut handle = charge_point_state.get_requests_to_send().iter();
+        let pv_charging_profile_request = handle.next();
+
+        assert!(pv_charging_profile_request.is_some());
+        assert_eq!(
+            pv_charging_profile_request.unwrap().message_type,
+            MessageTypeName::SetChargingProfile
+        );
+
+        let set_charging_profile_request = parse_message_request::<SetChargingProfileRequest>(
+            pv_charging_profile_request.unwrap().payload.as_str(),
+        );
+
+        static EXPECTED_PV_CHARGING_PROFILE_STACK_LEVEL: u32 = 1;
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .stack_level,
+            EXPECTED_PV_CHARGING_PROFILE_STACK_LEVEL
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_profile_kind,
+            ChargingProfileKindType::Relative
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_profile_purpose,
+            ChargingProfilePurposeType::TxProfile
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_rate_unit,
+            ChargingRateUnitType::A
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_schedule_period,
+            vec![ChargingSchedulePeriod {
+                start_period: 0,
+                limit: Decimal::from_f64_retain(config.charging_point.default_current)
+                    .unwrap()
+                    .round_dp(1),
+                number_phases: None
+            }]
+        );
+
+        let grid_charging_profile_request = handle.next();
+
+        assert!(grid_charging_profile_request.is_some());
+        assert_eq!(
+            grid_charging_profile_request.unwrap().message_type,
+            MessageTypeName::SetChargingProfile
+        );
+
+        let set_charging_profile_for_grid_request =
+            parse_message_request::<SetChargingProfileRequest>(
+                grid_charging_profile_request.unwrap().payload.as_str(),
+            );
+
+        static EXPECTED_GRID_CHARGING_PROFILE_STACK_LEVEL: u32 = 0;
+        assert_eq!(
+            set_charging_profile_for_grid_request
+                .cs_charging_profiles
+                .stack_level,
+            EXPECTED_GRID_CHARGING_PROFILE_STACK_LEVEL
+        );
+        assert_eq!(
+            set_charging_profile_for_grid_request
+                .cs_charging_profiles
+                .charging_profile_kind,
+            ChargingProfileKindType::Absolute
+        );
+        assert_eq!(
+            set_charging_profile_for_grid_request
+                .cs_charging_profiles
+                .charging_profile_purpose,
+            ChargingProfilePurposeType::TxProfile
+        );
+        assert_eq!(
+            set_charging_profile_for_grid_request
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_rate_unit,
+            ChargingRateUnitType::A
+        );
+        assert_eq!(
+            set_charging_profile_for_grid_request
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_schedule_period,
+            vec![
+                ChargingSchedulePeriod {
+                    start_period: 0,
+                    limit: Decimal::new(0, 0),
+                    number_phases: None
+                },
+                ChargingSchedulePeriod {
+                    start_period: PERIOD_START as i32,
+                    limit: Decimal::new(15, 0),
+                    number_phases: None
+                }
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn max_power_flow_and_changed_max_charging_current_with_pv_overproduction() -> Result<(), Box<dyn std::error::Error>> {
+        // Setting minimum charging current to 1A.
+        let mut config = test_config();
+        config.charging_point.minimum_charging_current = 1.0;
+
+        // Setting intervals in a way that only ONE element is used as average
+        config.charging_point.heartbeat_interval = 60;
+        config.photo_voltaic.moving_window_size_in_minutes = 1;
+
+        let hook = Arc::new(Mutex::new(OcppHooks::new(
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::new(Mutex::new(AwattarApiMock::default())),
+            config.clone(),
+        )));
+
+        let mut power_flow_realtime_data = default_powerflow_realtime_data();
+        power_flow_realtime_data.body.data.site.p_pv = Some(14000.0);
+        power_flow_realtime_data.body.data.site.p_load = Some(-100.0);
+        power_flow_realtime_data.body.data.site.p_akku = Some(-100.0);
+
+        hook.lock()
+            .unwrap()
+            .fronius_api
+            .lock()
+            .unwrap()
+            .power_flow_realtime_data = Some(power_flow_realtime_data);
+
+        static COS_PHI: f64 = 0.9988504095416009;
+        static POWER: f64 = 6255.9;
+        static CURRENT: f64 = 9.0;
+        static VOLTAGE: f64 = 695.9;
+
+        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        charge_point_state.set_max_current(4.0);
+        charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProduction);
+
+        hook.lock().unwrap().evaluate(&mut charge_point_state)?;
+
+        let mut handle = charge_point_state.get_requests_to_send().iter();
+        let pv_charging_profile_request = handle.next();
+
+        assert!(pv_charging_profile_request.is_some());
+        assert_eq!(
+            pv_charging_profile_request.unwrap().message_type,
+            MessageTypeName::SetChargingProfile
+        );
+
+        let set_charging_profile_request = parse_message_request::<SetChargingProfileRequest>(
+            pv_charging_profile_request.unwrap().payload.as_str(),
+        );
+
+        static EXPECTED_PV_CHARGING_PROFILE_STACK_LEVEL: u32 = 1;
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .stack_level,
+            EXPECTED_PV_CHARGING_PROFILE_STACK_LEVEL
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_profile_kind,
+            ChargingProfileKindType::Relative
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_profile_purpose,
+            ChargingProfilePurposeType::TxProfile
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_rate_unit,
+            ChargingRateUnitType::A
+        );
+        assert_eq!(
+            set_charging_profile_request
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_schedule_period,
+            vec![ChargingSchedulePeriod {
+                start_period: 0,
+                limit: Decimal::from_f64_retain(config.charging_point.default_current)
+                    .unwrap()
+                    .round_dp(1),
+                number_phases: None
+            }]
+        );
+
+        assert!(handle.next().is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn insufficient_power_flow_and_unchanged_max_charging_current()
+    -> Result<(), Box<dyn std::error::Error>> {
+        // Setting minimum charging current to 1A.
+        let mut config = test_config();
+        config.charging_point.minimum_charging_current = 1.0;
+
+        // Setting intervals in a way that only ONE element is used as average
+        config.charging_point.heartbeat_interval = 60;
+        config.photo_voltaic.moving_window_size_in_minutes = 1;
+
+        let hook = Arc::new(Mutex::new(OcppHooks::new(
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::new(Mutex::new(AwattarApiMock::default())),
+            config.clone(),
+        )));
+
+        let mut power_flow_realtime_data = default_powerflow_realtime_data();
+        power_flow_realtime_data.body.data.site.p_pv = Some(500.0);
+        power_flow_realtime_data.body.data.site.p_load = Some(-100.0);
+        power_flow_realtime_data.body.data.site.p_akku = Some(-100.0);
+
+        hook.lock()
+            .unwrap()
+            .fronius_api
+            .lock()
+            .unwrap()
+            .power_flow_realtime_data = Some(power_flow_realtime_data);
+
+        static COS_PHI: f64 = 0.9988504095416009;
+        static POWER: f64 = 6255.9;
+        static CURRENT: f64 = 9.0;
+        static VOLTAGE: f64 = 695.9;
+
+        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        charge_point_state.set_max_current(15.0);
+        charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
+
+        hook.lock().unwrap().evaluate(&mut charge_point_state)?;
+
+        assert!(charge_point_state.get_requests_to_send().is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn insufficient_power_flow_with_existing_pv_profile_and_unchanged_max_charging_current()
+    -> Result<(), Box<dyn std::error::Error>> {
+        // Setting minimum charging current to 1A.
+        let mut config = test_config();
+        config.charging_point.minimum_charging_current = 1.0;
+
+        // Setting intervals in a way that only ONE element is used as average
+        config.charging_point.heartbeat_interval = 60;
+        config.photo_voltaic.moving_window_size_in_minutes = 1;
+
+        let hook = Arc::new(Mutex::new(OcppHooks::new(
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::new(Mutex::new(AwattarApiMock::default())),
+            config.clone(),
+        )));
+
+        let mut power_flow_realtime_data = default_powerflow_realtime_data();
+        power_flow_realtime_data.body.data.site.p_pv = Some(500.0);
+        power_flow_realtime_data.body.data.site.p_load = Some(-100.0);
+        power_flow_realtime_data.body.data.site.p_akku = Some(-100.0);
+
+        hook.lock()
+            .unwrap()
+            .fronius_api
+            .lock()
+            .unwrap()
+            .power_flow_realtime_data = Some(power_flow_realtime_data);
+
+        static COS_PHI: f64 = 0.9988504095416009;
+        static POWER: f64 = 6255.9;
+        static CURRENT: f64 = 9.0;
+        static VOLTAGE: f64 = 695.9;
+
+        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        charge_point_state.set_max_current(15.0);
+        charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
+        charge_point_state.add_charging_profile(&ChargingProfile {
+            charging_profile_id: 5,
+            transaction_id: None,
+            stack_level: 1,
+            charging_profile_purpose: ChargingProfilePurposeType::TxProfile,
+            charging_profile_kind: ChargingProfileKindType::Relative,
+            recurrency_kind: None,
+            valid_from: None,
+            valid_to: None,
+            charging_schedule: ChargingSchedule {
+                duration: None,
+                start_schedule: None,
+                charging_rate_unit: ChargingRateUnitType::A,
+                charging_schedule_period: vec![ChargingSchedulePeriod {
+                    start_period: 0,
+                    limit: Decimal::new(6, 0),
+                    number_phases: None,
+                }],
+                min_charging_rate: None,
+            },
+        });
+
+        hook.lock().unwrap().evaluate(&mut charge_point_state)?;
+
+        let message_request = charge_point_state.get_requests_to_send().first();
+        assert!(message_request.is_some());
+
+        assert_eq!(
+            message_request.unwrap().message_type,
+            MessageTypeName::ClearChargingProfile
+        );
+
+        let clear_charging_profile_request = parse_message_request::<ClearChargingProfileRequest>(
+            message_request.unwrap().payload.as_str(),
+        );
+
+        assert_eq!(
+            clear_charging_profile_request,
+            ClearChargingProfileRequest {
+                id: Some(5),
+                connector_id: Some(1),
+                charging_profile_purpose: Some(ChargingProfilePurposeType::TxProfile),
+                stack_level: Some(1)
+            }
+        );
 
         Ok(())
     }
