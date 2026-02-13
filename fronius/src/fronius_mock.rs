@@ -24,9 +24,9 @@ impl FroniusApi for FroniusMock {
     fn get_power_flow_realtime_data(
         &mut self,
     ) -> Result<PowerFlowRealtimeData, Box<dyn std::error::Error>> {
-        Ok(self
-            .power_flow_realtime_data
-            .clone()
-            .expect("Forgot to set power_flow_realtime_data"))
+        match &self.power_flow_realtime_data {
+            Some(power_flow_realtime_data) => Ok(power_flow_realtime_data.clone()),
+            _ => Err("Empty power flow data".into())
+        }
     }
 }
