@@ -2,9 +2,9 @@ mod authorize_hook;
 mod meter_values_hooks;
 mod status_notification_hook;
 
+use ::config::config::SmartChargingMode;
 use chrono::{DateTime, Duration, Utc};
 use config::config;
-use ::config::config::SmartChargingMode;
 use fronius::FroniusApi;
 
 use log::info;
@@ -162,6 +162,27 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
     ) -> Result<(), CustomError> {
         static CHARGING_SCHEDULE_START_PERIOD: i32 = 0;
         static CHARGING_SCHEDULE_PERIOD_NUMBER_PHASES: Option<i32> = None;
+
+        if let Some(existing_pv_charging_profile) =
+            charging_point_state.get_active_charging_profile(TX_PV_CHARGING_PROFILE_ID)
+        {
+            if (existing_pv_charging_profile
+                .charging_schedule
+                .charging_schedule_period
+                .first()
+                .unwrap() // NOTE: Unwrap only safe because TX_PV_CHARGING_PROFILE is guaranteed to
+                          // consist of ONE schedule exclusively.
+                .limit
+                - charging_profile_max_current)
+                .abs()
+                <= Decimal::new(1, 0)
+            {
+                info!("PV ChargingProfile won't be updated because difference is < 1.0A");
+                return Ok(());
+            }
+
+            charging_point_state.remove_charging_profile(TX_PV_CHARGING_PROFILE_ID);
+        }
 
         let charging_profile = ChargingProfileBuilder::new(
             TX_PV_CHARGING_PROFILE_ID,
