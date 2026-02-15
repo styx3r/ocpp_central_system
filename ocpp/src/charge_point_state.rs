@@ -152,6 +152,10 @@ impl ChargePointState {
             .find(|&charging_profile| charging_profile.charging_profile_id == charging_profile_id)
     }
 
+    pub fn add_running_transaction_id(&mut self, transaction: Transaction) {
+        self.running_transactions.push(transaction);
+    }
+
     pub fn add_charging_profile(&mut self, charging_profile: &ChargingProfile) {
         self.active_charging_profiles.push(charging_profile.clone());
     }
