@@ -114,22 +114,21 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
 mod tests {
     use ::config::config::IdTag;
     use awattar::awattar_mock::AwattarApiMock;
-    use chrono::Utc;
     use config::config;
-    use fronius::{
-        Data, FroniusMock, PowerFlowRealtimeData, PowerFlowRealtimeDataBody,
-        PowerFlowRealtimeDataHeader, Site, Smartloads, Status,
-    };
-    use ocpp::{ChargingProfile, OcppAuthorizationHook, OcppMeterValuesHook};
+    use fronius::FroniusMock;
+    use ocpp::OcppAuthorizationHook;
     use serde::de::DeserializeOwned;
-    use std::{
-        collections::HashMap,
-        sync::{Arc, Mutex},
+    use std::sync::{Arc, Mutex};
+
+    use rust_ocpp::v1_6::{
+        messages::{
+            authorize::AuthorizeRequest, clear_charging_profile::ClearChargingProfileRequest,
+            set_charging_profile::SetChargingProfileRequest,
+        },
+        types::ChargingSchedulePeriod,
     };
 
-    use rust_ocpp::v1_6::messages::{
-        authorize::AuthorizeRequest, clear_charging_profile::ClearChargingProfileRequest,
-    };
+    use crate::hooks::TX_GRID_BASED_CHARGING_PROFILE_ID;
 
     use super::*;
 
@@ -250,6 +249,128 @@ mod tests {
                 charging_profile_purpose: Some(ChargingProfilePurposeType::TxProfile),
                 stack_level: None
             }
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn pv_and_grid_based_charging_mode_with_default_max_current()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut test_config = test_config();
+        test_config.id_tags = vec![IdTag {
+            id: "UNITTEST".to_string(),
+            smart_charging_mode: SmartChargingMode::PVOverProductionAndGridBased,
+        }];
+
+        let awattar_mock = Arc::new(Mutex::new(AwattarApiMock::default()));
+        let hook: Arc<Mutex<dyn OcppAuthorizationHook>> = Arc::new(Mutex::new(OcppHooks::new(
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::clone(&awattar_mock),
+            test_config,
+        )));
+
+        awattar_mock.lock().unwrap().set_response(awattar::Period {
+            start_timestamp: 0,
+            end_timestamp: 500,
+            average_price: 0.0,
+        });
+
+        let mut charge_point_state = ChargePointState::default();
+
+        let authorize_request = AuthorizeRequest {
+            id_tag: "UNITTEST".to_string(),
+        };
+        hook.lock()
+            .unwrap()
+            .evaluate(&authorize_request, &mut charge_point_state)?;
+
+        let mut handle = charge_point_state.get_requests_to_send().iter();
+        let set_charging_profile_request = handle.next().unwrap();
+        assert_eq!(
+            set_charging_profile_request.message_type,
+            MessageTypeName::SetChargingProfile
+        );
+
+        let set_charging_profile = parse_message_request::<SetChargingProfileRequest>(
+            set_charging_profile_request.payload.as_str(),
+        );
+
+        // Only checking ChargingProfile ID because content is checked in integration tests
+        assert_eq!(
+            set_charging_profile
+                .cs_charging_profiles
+                .charging_profile_id,
+            TX_GRID_BASED_CHARGING_PROFILE_ID
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn pv_based_charging_mode() -> Result<(), Box<dyn std::error::Error>> {
+        let mut test_config = test_config();
+        test_config.id_tags = vec![IdTag {
+            id: "UNITTEST".to_string(),
+            smart_charging_mode: SmartChargingMode::PVOverProduction,
+        }];
+
+        let awattar_mock = Arc::new(Mutex::new(AwattarApiMock::default()));
+        let hook: Arc<Mutex<dyn OcppAuthorizationHook>> = Arc::new(Mutex::new(OcppHooks::new(
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::clone(&awattar_mock),
+            test_config,
+        )));
+
+        let mut charge_point_state = ChargePointState::default();
+
+        let authorize_request = AuthorizeRequest {
+            id_tag: "UNITTEST".to_string(),
+        };
+        hook.lock()
+            .unwrap()
+            .evaluate(&authorize_request, &mut charge_point_state)?;
+
+        let mut handle = charge_point_state.get_requests_to_send().iter();
+        let set_charging_profile_request = handle.next().unwrap();
+        assert_eq!(
+            set_charging_profile_request.message_type,
+            MessageTypeName::SetChargingProfile
+        );
+
+        let set_charging_profile = parse_message_request::<SetChargingProfileRequest>(
+            set_charging_profile_request.payload.as_str(),
+        );
+
+        assert_eq!(
+            set_charging_profile
+                .cs_charging_profiles
+                .charging_profile_id,
+            TX_PV_PREPARATION_CHARGING_PROFILE_ID
+        );
+        assert_eq!(set_charging_profile.cs_charging_profiles.stack_level, 0);
+        assert_eq!(
+            set_charging_profile
+                .cs_charging_profiles
+                .charging_profile_purpose,
+            ChargingProfilePurposeType::TxProfile
+        );
+        assert_eq!(
+            set_charging_profile
+                .cs_charging_profiles
+                .charging_profile_kind,
+            ChargingProfileKindType::Absolute
+        );
+        assert_eq!(
+            set_charging_profile
+                .cs_charging_profiles
+                .charging_schedule
+                .charging_schedule_period,
+            vec![ChargingSchedulePeriod {
+                start_period: 0,
+                limit: Decimal::new(0, 0),
+                number_phases: None
+            }]
         );
 
         Ok(())
