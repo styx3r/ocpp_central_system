@@ -22,7 +22,7 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
         &mut self,
         charging_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let possible_pv_charging_current = self.calculate_power_flow_realtime_data(
+        let possible_pv_charging_current = self.calculate_possible_pv_charging_current(
             charging_point_state,
             Arc::clone(&self.fronius_api),
         );
@@ -62,7 +62,7 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
                         ))?
                         .round_dp(1);
 
-                        self.calculate_pv_tx_profile(
+                        self.build_pv_tx_profile(
                             charging_point_state,
                             possible_charging_current_decimal,
                         )?;
@@ -94,7 +94,7 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
         if let Some(charging_profile_max_current) = charging_profile_max_current
             && smart_charging_mode == SmartChargingMode::PVOverProductionAndGridBased
         {
-            self.calculate_grid_based_smart_charging_tx_profile(
+            self.build_grid_based_smart_charging_tx_profile(
                 charging_point_state,
                 charging_profile_max_current,
             )?;

@@ -73,7 +73,7 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
                     return Ok(());
                 }
 
-                self.calculate_grid_based_smart_charging_tx_profile(
+                self.build_grid_based_smart_charging_tx_profile(
                     charge_point_state,
                     max_charging_current.unwrap(),
                 )?;

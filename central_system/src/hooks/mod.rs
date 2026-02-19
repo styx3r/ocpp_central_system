@@ -21,6 +21,12 @@ use std::sync::{Arc, Mutex};
 
 //-------------------------------------------------------------------------------------------------
 
+/// Default connector ID.
+/// NOTE: This may only be used on WallBoxes with only one connector!
+static CONNECTOR_ID: i32 = 1;
+
+//-------------------------------------------------------------------------------------------------
+
 static TX_GRID_BASED_CHARGING_PROFILE_ID: i32 = 2;
 /// PV profile consists of two profiles. First profile which does not allow any power and the
 /// second profile which sets the allowed power.
@@ -31,14 +37,21 @@ static TX_PV_CHARGING_STACK_LEVEL: u32 = 1;
 
 //-------------------------------------------------------------------------------------------------
 
+/// Wrapper struct which encapsulated all necessary interfaces to implement the provided hooks by
+/// [`ocpp`]
 pub struct OcppHooks<T: FroniusApi, U: AwattarApi> {
+    /// Interface to the FroniusApi
     fronius_api: Arc<Mutex<T>>,
+    /// Interface to the awattar API
     awattar_api: Arc<Mutex<U>>,
+    /// Overall config object
     config: config::Config,
+    /// Vector of calculated PV overproduction
     pv_overproduction: Vec<f64>,
 }
 
 impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
+    /// Creates a new wrapper object.
     pub fn new(
         fronius_api: Arc<Mutex<T>>,
         awattar_api: Arc<Mutex<U>>,
@@ -52,6 +65,8 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         }
     }
 
+    /// Calculates current possible maximum charging current (A). Returns None if the difference
+    /// between the current and the latest maximum charging current is < 1.0 A
     fn get_updated_max_charging_current(
         &mut self,
         charge_point_state: &mut ChargePointState,
@@ -81,7 +96,16 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         charging_profile_max_current
     }
 
-    pub fn calculate_grid_based_smart_charging_tx_profile(
+    /// Builds the grid based smart charging TX profile. There are two cases possible
+    ///
+    ///   * No grid based TX profile is currently in use and thus the cheapest charging period
+    ///     will be calculated based on the awattar API.
+    ///
+    ///   * There is already a TX profile currently in use and thus the limit (A) will be updated.
+    ///
+    /// NOTE: The update logic within this method is needed because this profile uses valid_from
+    ///       and valid_to. Those values MUST NOT be changed upon limit change.
+    pub fn build_grid_based_smart_charging_tx_profile(
         &self,
         charge_point_state: &mut ChargePointState,
         charging_profile_max_current: Decimal,
@@ -155,7 +179,10 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         Ok(())
     }
 
-    fn calculate_pv_tx_profile(
+    /// Builds the PV based smart charging profile. If there is already a PV charging profile in
+    /// use the limit (A) will be updated. Additionally the charging profile will only be changed
+    /// if the difference of the current limit and the new limit is < 1.0 A.
+    fn build_pv_tx_profile(
         &mut self,
         charging_point_state: &mut ChargePointState,
         charging_profile_max_current: Decimal,
@@ -171,7 +198,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                 .charging_schedule_period
                 .first()
                 .unwrap() // NOTE: Unwrap only safe because TX_PV_CHARGING_PROFILE is guaranteed to
-                          // consist of ONE schedule exclusively.
+                          //       consist of ONE schedule exclusively.
                 .limit
                 - charging_profile_max_current)
                 .abs()
@@ -199,6 +226,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         .get();
 
         charging_point_state.add_charging_profile(&charging_profile);
+        charging_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProduction);
 
         let (uuid, set_charging_profile_request) =
             SetChargingProfileBuilder::new(CONNECTOR_ID, charging_profile)
@@ -214,7 +242,19 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         Ok(())
     }
 
-    fn calculate_power_flow_realtime_data(
+    /// Calculates possible PV charging current w.r.t produced PV power, general load, power used
+    /// to load the battery and if available power used by the charging EV.
+    ///
+    /// $                                       | P_pv + P_load + P_battery IFF P_battery < 0.0
+    /// $                                       |
+    /// $P_overproduction = P_active_imported + |
+    /// $                                       |
+    /// $                                       | P_pv + P_load             ELSE
+    ///
+    /// The possible charging current will only be calculated if enough measurements have been
+    /// received. The amount of needed measurements is configurable with the
+    /// `moving_window_size_in_minutes` config parameter.
+    fn calculate_possible_pv_charging_current(
         &mut self,
         charging_point_state: &mut ChargePointState,
         fronius_api: Arc<Mutex<T>>,
@@ -250,34 +290,38 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             let moving_window_size =
                 Duration::minutes(self.config.photo_voltaic.moving_window_size_in_minutes);
 
+            // TODO(styxer): This calculation is not correct! Measurements are received by a
+            //               configurable parameter and NOT with the heartbeat interval!
             let expected_vector_size = (moving_window_size.as_seconds_f64()
                 / self.config.charging_point.heartbeat_interval as f64)
                 .ceil() as usize;
 
-            if self.pv_overproduction.len() == expected_vector_size {
-                let pv_overproduction_average = self.pv_overproduction.iter().sum::<f64>()
-                    / self.pv_overproduction.len() as f64;
-                self.pv_overproduction.remove(0);
+            if self.pv_overproduction.len() != expected_vector_size {
+                return None;
+            }
+
+            let pv_overproduction_average = self.pv_overproduction.iter().sum::<f64>()
+                / self.pv_overproduction.len() as f64;
+            self.pv_overproduction.remove(0);
+
+            info!(
+                "PV overproduction in the last {} minutes: {}",
+                self.config.photo_voltaic.moving_window_size_in_minutes,
+                pv_overproduction_average
+            );
+
+            if let Some(latest_cos_phi) = charging_point_state.get_latest_cos_phi()
+                && let Some(latest_voltage) = charging_point_state.get_latest_voltage()
+            {
+                let possible_charging_current =
+                    pv_overproduction_average / (latest_cos_phi * latest_voltage);
 
                 info!(
-                    "PV overproduction in the last {} minutes: {}",
-                    self.config.photo_voltaic.moving_window_size_in_minutes,
-                    pv_overproduction_average
+                    "Resulting in {} A charging current",
+                    possible_charging_current
                 );
 
-                if let Some(latest_cos_phi) = charging_point_state.get_latest_cos_phi()
-                    && let Some(latest_voltage) = charging_point_state.get_latest_voltage()
-                {
-                    let possible_charging_current =
-                        pv_overproduction_average / (latest_cos_phi * latest_voltage);
-
-                    info!(
-                        "Resulting in {} A charging current",
-                        possible_charging_current
-                    );
-
-                    return Some(possible_charging_current);
-                }
+                return Some(possible_charging_current);
             }
         }
 
@@ -287,10 +331,9 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
 
 //-------------------------------------------------------------------------------------------------
 
-static CONNECTOR_ID: i32 = 1;
-
-//-------------------------------------------------------------------------------------------------
-
+/// Calculates the maximum possible current as P_max / (V_charging_point * cos(phi)).
+/// NOTE: The calculated current will always be in the interval `[minimum_charging_current, default_current]`
+///       where both values are configurable.
 pub(crate) fn calculate_max_current(
     config: &config::Config,
     charging_point_state: &mut ChargePointState,
