@@ -69,14 +69,17 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
                 let max_charging_current =
                     self.get_updated_max_charging_current(charge_point_state);
 
-                if max_charging_current.is_none() {
-                    return Ok(());
+                if max_charging_current.is_some() {
+                    self.build_grid_based_smart_charging_tx_profile(
+                        charge_point_state,
+                        max_charging_current.unwrap(),
+                    )?;
+                } else if let Some(old_current) = charge_point_state.get_max_current() {
+                    self.build_grid_based_smart_charging_tx_profile(
+                        charge_point_state,
+                        Decimal::from_f64_retain(old_current).unwrap(),
+                    )?;
                 }
-
-                self.build_grid_based_smart_charging_tx_profile(
-                    charge_point_state,
-                    max_charging_current.unwrap(),
-                )?;
             }
             SmartChargingMode::PVOverProduction => {
                 let start_timestamp = Utc::now();
