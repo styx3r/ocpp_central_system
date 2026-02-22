@@ -74,11 +74,10 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
                         charge_point_state,
                         max_charging_current.unwrap(),
                     )?;
-                } else if let Some(old_current) = charge_point_state.get_max_current() {
-                    self.build_grid_based_smart_charging_tx_profile(
-                        charge_point_state,
-                        Decimal::from_f64_retain(old_current).unwrap(),
-                    )?;
+                } else if let Some(old_current) = charge_point_state.get_max_current()
+                    && let Some(limit) = Decimal::from_f64_retain(old_current)
+                {
+                    self.build_grid_based_smart_charging_tx_profile(charge_point_state, limit)?;
                 }
             }
             SmartChargingMode::PVOverProduction => {
@@ -252,6 +251,60 @@ mod tests {
                 charging_profile_purpose: Some(ChargingProfilePurposeType::TxProfile),
                 stack_level: None
             }
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn pv_and_grid_based_charging_mode_max_current_delta_not_big_enough()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut test_config = test_config();
+        test_config.id_tags = vec![IdTag {
+            id: "UNITTEST".to_string(),
+            smart_charging_mode: SmartChargingMode::PVOverProductionAndGridBased,
+        }];
+
+        let awattar_mock = Arc::new(Mutex::new(AwattarApiMock::default()));
+        let hook: Arc<Mutex<dyn OcppAuthorizationHook>> = Arc::new(Mutex::new(OcppHooks::new(
+            Arc::new(Mutex::new(FroniusMock::default())),
+            Arc::clone(&awattar_mock),
+            test_config,
+        )));
+
+        awattar_mock.lock().unwrap().set_response(awattar::Period {
+            start_timestamp: 0,
+            end_timestamp: 500,
+            average_price: 0.0,
+        });
+
+        let mut charge_point_state = ChargePointState::default();
+        charge_point_state.set_max_current(16.0);
+
+        let authorize_request = AuthorizeRequest {
+            id_tag: "UNITTEST".to_string(),
+        };
+        hook.lock()
+            .unwrap()
+            .evaluate(&authorize_request, &mut charge_point_state)?;
+
+        let mut handle = charge_point_state.get_requests_to_send().iter();
+        let set_charging_profile_request = handle.next().unwrap();
+        assert_eq!(
+            set_charging_profile_request.message_type,
+            MessageTypeName::SetChargingProfile
+        );
+
+        let set_charging_profile = parse_message_request::<SetChargingProfileRequest>(
+            set_charging_profile_request.payload.as_str(),
+        );
+
+        // Only checking ChargingProfile ID because content is checked in integration tests
+        assert_eq!(
+            set_charging_profile
+                .cs_charging_profiles
+                .charging_profile_id,
+            TX_GRID_BASED_CHARGING_PROFILE_ID
         );
 
         Ok(())
