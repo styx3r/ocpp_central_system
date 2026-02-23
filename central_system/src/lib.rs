@@ -16,6 +16,7 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 //-------------------------------------------------------------------------------------------------
 
+/// Main entry point. Basically only a wrapper to enable integration tests
 pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
     info!("Starting OCPPCentralSystem v{}", VERSION);
     let hooks = Arc::new(Mutex::new(OcppHooks::new(

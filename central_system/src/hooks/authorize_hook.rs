@@ -16,8 +16,7 @@ use chrono::Utc;
 
 use crate::hooks::{CONNECTOR_ID, TX_PV_PREPARATION_CHARGING_PROFILE_ID};
 
-//-------------------------------------------------------------------------------------------------
-
+/// Builds a ClearChargingProfileRequest and disables smart charging.
 fn clear_tx_charging_profiles(
     charge_point_state: &mut ChargePointState,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -42,9 +41,25 @@ fn clear_tx_charging_profiles(
     Ok(())
 }
 
-//-------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------
 
 impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, U> {
+    /// Applies special charging profiles depending on the configured smart charging profile for
+    /// the given ID tag.
+    ///
+    /// Following smart charging modes are possible:
+    ///
+    ///   * Instant: No charging will be applied because the DefaultTxProfile will be used
+    ///
+    ///   * PVOverProductionAndGridBased: Smart charging profile based on the cheapest period will
+    ///                                   be applied. If possible PV charging profile with stack
+    ///                                   level 1 will be applied later. NOTE: cheapest period is
+    ///                                   evaluated using awattar API.
+    ///
+    ///   * PVOverProduction: PV charging profile will be applied. This profile limits the current
+    ///                       to 0 A. The limit will be changed as soon as the moving window
+    ///                       average exceeds a the confiugrable minimum charging current (A).
+    ///
     fn evaluate(
         &mut self,
         authorization_request: &AuthorizeRequest,

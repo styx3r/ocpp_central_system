@@ -17,6 +17,7 @@ static BATTERY_BLOCKING_TIME_IN_HOURS: u64 = 12;
 
 //-------------------------------------------------------------------------------------------------
 
+/// Creates a ClearChargingProfile message and inserts it into the ChargePointState.
 fn clear_tx_charging_profiles(
     charge_point_state: &mut ChargePointState,
     charging_profile_id: i32,
@@ -44,6 +45,7 @@ fn clear_tx_charging_profiles(
 
 //-------------------------------------------------------------------------------------------------
 
+/// Unblocks the battery connected to the Fronius inverter and clears all active charging profiles.
 fn unblock_battery_and_clear_tx_profiles<T: FroniusApi>(
     charge_point_state: &mut ChargePointState,
     fronius_api: Arc<Mutex<T>>,
@@ -67,6 +69,8 @@ fn unblock_battery_and_clear_tx_profiles<T: FroniusApi>(
 //-------------------------------------------------------------------------------------------------
 
 impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHooks<T, U> {
+    /// Implements a state machine which defines if the connected battery should be unblocked or
+    /// blocked.
     fn evaluate(
         &mut self,
         status_notification: &StatusNotificationRequest,

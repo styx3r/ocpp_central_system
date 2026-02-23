@@ -18,6 +18,21 @@ use crate::hooks::{CONNECTOR_ID, TX_PV_CHARGING_PROFILE_ID, TX_PV_CHARGING_STACK
 //-------------------------------------------------------------------------------------------------
 
 impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U> {
+    /// Handles charging profile adjustments depending on the current used charging profile.
+    ///
+    /// Following smart charging modes are possible:
+    ///
+    ///   * Instant: Adjusts the maximum charging current for the TxDefaultProfile.
+    ///
+    ///   * PVOverProductionAndGridBased: If there is enough PV overproduction a charging profile
+    ///                                   with the maximum possible charging current will be set.
+    ///                                   If there is not enough overproduction and a PV charging
+    ///                                   profile is currently in use it will be cleared.
+    ///                                   Additionally the grid based TxProfile max current will be
+    ///                                   updated if necessary.
+    ///
+    ///   * PVOverProduction: AFAIK this is the same as `PVOverProductionAndGridBased` without
+    ///                       updating the grid based TxProfile.
     fn evaluate(
         &mut self,
         charging_point_state: &mut ChargePointState,
