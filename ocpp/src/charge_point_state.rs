@@ -68,7 +68,7 @@ pub struct ChargePointState {
     /// library is single threaded.
     pub(crate) running_transactions: Vec<Transaction>,
 
-    /// Indicates if the ChargingPoint is currently used in SmartCharging mode.
+    /// Indicates which SmartChargingMode is currently used.
     smart_charging_mode: SmartChargingMode,
 
     /// Currently active ChargingProfiles

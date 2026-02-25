@@ -405,7 +405,13 @@ mod tests {
         config.charging_point.minimum_charging_current = 1.0;
 
         // Setting intervals in a way that only ONE element is used as average
-        config.charging_point.heartbeat_interval = 60;
+        config
+            .charging_point
+            .config_parameters
+            .push(config::ConfigSetting {
+                key: "MeterValueSampleInterval".to_owned(),
+                value: "60".to_owned(),
+            });
         config.photo_voltaic.moving_window_size_in_minutes = 1;
 
         let hook = Arc::new(Mutex::new(OcppHooks::new(
@@ -498,7 +504,13 @@ mod tests {
         config.charging_point.minimum_charging_current = 1.0;
 
         // Setting intervals in a way that only ONE element is used as average
-        config.charging_point.heartbeat_interval = 60;
+        config
+            .charging_point
+            .config_parameters
+            .push(config::ConfigSetting {
+                key: "MeterValueSampleInterval".to_owned(),
+                value: "60".to_owned(),
+            });
         config.photo_voltaic.moving_window_size_in_minutes = 1;
 
         let hook = Arc::new(Mutex::new(OcppHooks::new(
@@ -691,7 +703,13 @@ mod tests {
         config.charging_point.minimum_charging_current = 1.0;
 
         // Setting intervals in a way that only ONE element is used as average
-        config.charging_point.heartbeat_interval = 60;
+        config
+            .charging_point
+            .config_parameters
+            .push(config::ConfigSetting {
+                key: "MeterValueSampleInterval".to_owned(),
+                value: "60".to_owned(),
+            });
         config.photo_voltaic.moving_window_size_in_minutes = 1;
 
         let hook = Arc::new(Mutex::new(OcppHooks::new(
@@ -788,7 +806,13 @@ mod tests {
         config.charging_point.minimum_charging_current = 1.0;
 
         // Setting intervals in a way that only ONE element is used as average
-        config.charging_point.heartbeat_interval = 60;
+        config
+            .charging_point
+            .config_parameters
+            .push(config::ConfigSetting {
+                key: "MeterValueSampleInterval".to_owned(),
+                value: "60".to_owned(),
+            });
         config.photo_voltaic.moving_window_size_in_minutes = 1;
 
         let hook = Arc::new(Mutex::new(OcppHooks::new(
@@ -832,7 +856,13 @@ mod tests {
         config.charging_point.minimum_charging_current = 1.0;
 
         // Setting intervals in a way that only ONE element is used as average
-        config.charging_point.heartbeat_interval = 60;
+        config
+            .charging_point
+            .config_parameters
+            .push(config::ConfigSetting {
+                key: "MeterValueSampleInterval".to_owned(),
+                value: "60".to_owned(),
+            });
         config.photo_voltaic.moving_window_size_in_minutes = 1;
 
         let hook = Arc::new(Mutex::new(OcppHooks::new(
@@ -918,7 +948,13 @@ mod tests {
         config.charging_point.minimum_charging_current = 1.0;
 
         // Setting intervals in a way that only ONE element is used as average
-        config.charging_point.heartbeat_interval = 60;
+        config
+            .charging_point
+            .config_parameters
+            .push(config::ConfigSetting {
+                key: "MeterValueSampleInterval".to_owned(),
+                value: "60".to_owned(),
+            });
         config.photo_voltaic.moving_window_size_in_minutes = 1;
 
         let hook = Arc::new(Mutex::new(OcppHooks::new(

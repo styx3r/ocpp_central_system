@@ -28,7 +28,7 @@ use rust_ocpp::v1_6::{
 
 //-------------------------------------------------------------------------------------------------
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct ExpectedJSONRequestFormat {
     message_id: u32,
     uuid: String,
@@ -118,6 +118,66 @@ fn validate_initial_messages(
             json: json!({ "requestedMessage": "MeterValues" }),
         },
     ] {
+        let uuid = validate_request_message(websocket, &expected_message)?;
+        websocket.send(tungstenite::Message::text(format!(
+            "[3,\"{}\",{{\"status\": \"Accepted\"}}]",
+            uuid
+        )))?;
+    }
+
+    Ok(())
+}
+
+fn validate_initial_messages_with_config_parameters(
+    websocket: &mut WebSocket<MaybeTlsStream<TcpStream>>,
+    config_parameters: &Vec<config::ConfigSetting>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut expected_messages = vec![
+        ExpectedJSONRequestFormat {
+            message_id: 2,
+            uuid: "".to_owned(),
+            message_type: "TriggerMessage".to_owned(),
+            json: json!({"requestedMessage": "BootNotification"}),
+        },
+        ExpectedJSONRequestFormat {
+            message_id: 2,
+            uuid: "".to_owned(),
+            message_type: "TriggerMessage".to_owned(),
+            json: json!({"requestedMessage": "StatusNotification"}),
+        },
+        ExpectedJSONRequestFormat {
+            message_id: 2,
+            uuid: "".to_owned(),
+            message_type: "ClearChargingProfile".to_owned(),
+            json: json!({}),
+        },
+        ExpectedJSONRequestFormat {
+            message_id: 2,
+            uuid: "".to_owned(),
+            message_type: "SetChargingProfile".to_owned(),
+            json: json!({"connectorId":0,"csChargingProfiles":{"chargingProfileId":3,"chargingProfileKind":"Absolute","chargingProfilePurpose":"ChargePointMaxProfile","chargingSchedule":{"chargingRateUnit":"A","chargingSchedulePeriod":[{"limit":16,"startPeriod":0}]},"stackLevel":0}}),
+        },
+        ExpectedJSONRequestFormat {
+            message_id: 2,
+            uuid: "".to_owned(),
+            message_type: "TriggerMessage".to_owned(),
+            json: json!({ "requestedMessage": "MeterValues" }),
+        },
+    ];
+
+    config_parameters.iter().for_each(|config_parameter| {
+        expected_messages.insert(
+            expected_messages.len() - 1,
+            ExpectedJSONRequestFormat {
+                message_id: 2,
+                uuid: "".to_owned(),
+                message_type: "ChangeConfiguration".to_owned(),
+                json: json!({ "key": config_parameter.key.clone(), "value": config_parameter.value.clone() }),
+            },
+        );
+    });
+
+    for expected_message in expected_messages {
         let uuid = validate_request_message(websocket, &expected_message)?;
         websocket.send(tungstenite::Message::text(format!(
             "[3,\"{}\",{{\"status\": \"Accepted\"}}]",
@@ -1013,13 +1073,23 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
 
     // Setting ChargingPoint interval to 60s and PV moving window size to 1minute for the sake of
     // the test.
-    config.charging_point.heartbeat_interval = 60;
+    let config_setting = config::ConfigSetting {
+        key: "MeterValueSampleInterval".to_owned(),
+        value: "60".to_owned(),
+    };
+    config
+        .charging_point
+        .config_parameters
+        .push(config_setting.clone());
     config.photo_voltaic.moving_window_size_in_minutes = 1;
 
     let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
-    validate_initial_messages(&mut websocket)?;
+    validate_initial_messages_with_config_parameters(
+        &mut websocket,
+        &vec![config_setting],
+    )?;
 
     let now = Utc::now();
     let start_timestamp = now + Duration::hours(1);

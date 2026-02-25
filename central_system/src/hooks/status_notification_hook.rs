@@ -58,7 +58,9 @@ fn unblock_battery_and_clear_tx_profiles<T: FroniusApi>(
             CONNECTOR_ID,
             charging_profile.charging_profile_purpose,
             charging_profile.stack_level,
-        )?
+        )?;
+
+        charge_point_state.remove_charging_profile(charging_profile.charging_profile_id);
     }
 
     charge_point_state.disable_smart_charging();
@@ -376,12 +378,7 @@ mod tests {
                 .block_battery_for_duration_called
         );
 
-        assert!(
-            !fronius_mock
-                .lock()
-                .unwrap()
-                .unblock_battery_called
-        );
+        assert!(!fronius_mock.lock().unwrap().unblock_battery_called);
 
         assert_eq!(
             charge_point_state.get_charge_point_status(),
@@ -445,6 +442,8 @@ mod tests {
         let mut charge_point_state =
             charge_point_state_with_dummy_charge_profile(ChargePointStatus::Preparing);
 
+        assert!(!charge_point_state.get_active_charging_profiles().is_empty());
+
         let status_notification_charging = StatusNotificationRequest {
             connector_id: CONNECTOR_ID as u32,
             error_code: ChargePointErrorCode::NoError,
@@ -494,6 +493,8 @@ mod tests {
                 stack_level: Some(0)
             }
         );
+
+        assert!(charge_point_state.get_active_charging_profiles().is_empty());
 
         Ok(())
     }
@@ -555,6 +556,8 @@ mod tests {
         let mut charge_point_state =
             charge_point_state_with_dummy_charge_profile(ChargePointStatus::Preparing);
 
+        assert!(!charge_point_state.get_active_charging_profiles().is_empty());
+
         let status_notification_charging = StatusNotificationRequest {
             connector_id: CONNECTOR_ID as u32,
             error_code: ChargePointErrorCode::NoError,
@@ -604,6 +607,8 @@ mod tests {
                 stack_level: Some(0)
             }
         );
+
+        assert!(charge_point_state.get_active_charging_profiles().is_empty());
         Ok(())
     }
 
@@ -620,6 +625,7 @@ mod tests {
         let mut charge_point_state =
             charge_point_state_with_dummy_charge_profile(ChargePointStatus::Charging);
 
+        assert!(!charge_point_state.get_active_charging_profiles().is_empty());
         let status_notification_charging = StatusNotificationRequest {
             connector_id: CONNECTOR_ID as u32,
             error_code: ChargePointErrorCode::NoError,
@@ -669,6 +675,7 @@ mod tests {
                 stack_level: Some(0)
             }
         );
+        assert!(charge_point_state.get_active_charging_profiles().is_empty());
         Ok(())
     }
 
@@ -773,6 +780,7 @@ mod tests {
         let mut charge_point_state =
             charge_point_state_with_dummy_charge_profile(ChargePointStatus::Charging);
 
+        assert!(!charge_point_state.get_active_charging_profiles().is_empty());
         let status_notification_charging = StatusNotificationRequest {
             connector_id: CONNECTOR_ID as u32,
             error_code: ChargePointErrorCode::NoError,
@@ -822,6 +830,7 @@ mod tests {
                 stack_level: Some(0)
             }
         );
+        assert!(charge_point_state.get_active_charging_profiles().is_empty());
         Ok(())
     }
 
@@ -838,6 +847,7 @@ mod tests {
         let mut charge_point_state =
             charge_point_state_with_dummy_charge_profile(ChargePointStatus::SuspendedEV);
 
+        assert!(!charge_point_state.get_active_charging_profiles().is_empty());
         let status_notification_charging = StatusNotificationRequest {
             connector_id: CONNECTOR_ID as u32,
             error_code: ChargePointErrorCode::NoError,
@@ -887,6 +897,7 @@ mod tests {
                 stack_level: Some(0)
             }
         );
+        assert!(charge_point_state.get_active_charging_profiles().is_empty());
         Ok(())
     }
 
@@ -947,6 +958,7 @@ mod tests {
         let mut charge_point_state =
             charge_point_state_with_dummy_charge_profile(ChargePointStatus::SuspendedEV);
 
+        assert!(!charge_point_state.get_active_charging_profiles().is_empty());
         let status_notification_charging = StatusNotificationRequest {
             connector_id: CONNECTOR_ID as u32,
             error_code: ChargePointErrorCode::NoError,
@@ -996,6 +1008,7 @@ mod tests {
                 stack_level: Some(0)
             }
         );
+        assert!(charge_point_state.get_active_charging_profiles().is_empty());
         Ok(())
     }
 
@@ -1012,6 +1025,7 @@ mod tests {
         let mut charge_point_state =
             charge_point_state_with_dummy_charge_profile(ChargePointStatus::SuspendedEVSE);
 
+        assert!(!charge_point_state.get_active_charging_profiles().is_empty());
         let status_notification_charging = StatusNotificationRequest {
             connector_id: CONNECTOR_ID as u32,
             error_code: ChargePointErrorCode::NoError,
@@ -1061,6 +1075,7 @@ mod tests {
                 stack_level: Some(0)
             }
         );
+        assert!(charge_point_state.get_active_charging_profiles().is_empty());
         Ok(())
     }
 
@@ -1121,6 +1136,7 @@ mod tests {
         let mut charge_point_state =
             charge_point_state_with_dummy_charge_profile(ChargePointStatus::SuspendedEVSE);
 
+        assert!(!charge_point_state.get_active_charging_profiles().is_empty());
         let status_notification_charging = StatusNotificationRequest {
             connector_id: CONNECTOR_ID as u32,
             error_code: ChargePointErrorCode::NoError,
@@ -1170,6 +1186,7 @@ mod tests {
                 stack_level: Some(0)
             }
         );
+        assert!(charge_point_state.get_active_charging_profiles().is_empty());
         Ok(())
     }
 
@@ -1186,6 +1203,7 @@ mod tests {
         let mut charge_point_state =
             charge_point_state_with_dummy_charge_profile(ChargePointStatus::Finishing);
 
+        assert!(!charge_point_state.get_active_charging_profiles().is_empty());
         let status_notification_charging = StatusNotificationRequest {
             connector_id: CONNECTOR_ID as u32,
             error_code: ChargePointErrorCode::NoError,
@@ -1235,6 +1253,7 @@ mod tests {
                 stack_level: Some(0)
             }
         );
+        assert!(charge_point_state.get_active_charging_profiles().is_empty());
         Ok(())
     }
 }

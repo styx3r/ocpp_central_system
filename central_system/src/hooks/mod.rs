@@ -1,5 +1,5 @@
 mod authorize_hook;
-mod meter_values_hooks;
+mod meter_values_hook;
 mod status_notification_hook;
 
 use ::config::config::SmartChargingMode;
@@ -7,7 +7,7 @@ use chrono::{DateTime, Duration, Utc};
 use config::config;
 use fronius::FroniusApi;
 
-use log::info;
+use log::{info, warn};
 use ocpp::{
     ChargePointState, ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType,
     CustomError, Decimal, MessageBuilder, MessageTypeName,
@@ -198,7 +198,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                 .charging_schedule_period
                 .first()
                 .unwrap() // NOTE: Unwrap only safe because TX_PV_CHARGING_PROFILE is guaranteed to
-                          //       consist of ONE schedule exclusively.
+                //       consist of ONE schedule exclusively.
                 .limit
                 - charging_profile_max_current)
                 .abs()
@@ -282,7 +282,16 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                     0.0
                 };
 
-                info!("Current PV overproduction {}W", overproduction);
+                info!(
+                    "Current PV overproduction {} + {} + {} + {} = {}W",
+                    power_pv,
+                    power_load,
+                    if power_akku < 0.0 { power_akku } else { 0.0 },
+                    charging_point_state
+                        .get_latest_power_active_imported()
+                        .unwrap_or(0.0),
+                    overproduction
+                );
 
                 self.pv_overproduction.push(overproduction);
             }
@@ -290,24 +299,49 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             let moving_window_size =
                 Duration::minutes(self.config.photo_voltaic.moving_window_size_in_minutes);
 
-            // TODO(styxer): This calculation is not correct! Measurements are received by a
-            //               configurable parameter and NOT with the heartbeat interval!
+            static METER_VALUES_SAMPLE_INTERVAL_CONFIG_KEY: &str = "MeterValueSampleInterval";
+            let meter_value_sample_interval = if let Some(meter_value_sample_interval) = self
+                .config
+                .charging_point
+                .config_parameters
+                .iter()
+                .find(|config_parameter| {
+                    config_parameter.key == METER_VALUES_SAMPLE_INTERVAL_CONFIG_KEY
+                }) {
+                match meter_value_sample_interval.value.parse::<i64>() {
+                    Ok(meter_value_sample_interval) => meter_value_sample_interval,
+                    _ => {
+                        warn!(
+                            "PV current can't be calculated because {} value {} could not be parsed as i64!",
+                            METER_VALUES_SAMPLE_INTERVAL_CONFIG_KEY,
+                            meter_value_sample_interval.value
+                        );
+                        return None;
+                    }
+                }
+            } else {
+                warn!(
+                    "PV current can't be calculated because {} is not specified",
+                    METER_VALUES_SAMPLE_INTERVAL_CONFIG_KEY
+                );
+                return None;
+            };
+
             let expected_vector_size = (moving_window_size.as_seconds_f64()
-                / self.config.charging_point.heartbeat_interval as f64)
+                / meter_value_sample_interval as f64)
                 .ceil() as usize;
 
             if self.pv_overproduction.len() != expected_vector_size {
                 return None;
             }
 
-            let pv_overproduction_average = self.pv_overproduction.iter().sum::<f64>()
-                / self.pv_overproduction.len() as f64;
+            let pv_overproduction_average =
+                self.pv_overproduction.iter().sum::<f64>() / self.pv_overproduction.len() as f64;
             self.pv_overproduction.remove(0);
 
             info!(
                 "PV overproduction in the last {} minutes: {}",
-                self.config.photo_voltaic.moving_window_size_in_minutes,
-                pv_overproduction_average
+                self.config.photo_voltaic.moving_window_size_in_minutes, pv_overproduction_average
             );
 
             if let Some(latest_cos_phi) = charging_point_state.get_latest_cos_phi()
