@@ -16,12 +16,31 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
 ) -> Result<meter_values::MeterValuesResponse, CustomError> {
     info!("Received {}", MessageTypeName::MeterValues);
 
+    let mut current_export: Option<f64> = None;
     let mut current_import: Option<f64> = None;
+
+    let mut power_active_export: Option<f64> = None;
     let mut power_active_import: Option<f64> = None;
+
+    let mut power_reactive_export: Option<f64> = None;
+    let mut power_reactive_import: Option<f64> = None;
+
     let mut system_voltage: Option<f64> = None;
+
     for meter_value in &meter_values_request.meter_value {
         for sampled_value in &meter_value.sampled_value {
             match sampled_value.measurand {
+                Some(rust_ocpp::v1_6::types::Measurand::CurrentExport) => {
+                    match (current_export, sampled_value.value.parse::<f64>()) {
+                        (None, Ok(v)) => {
+                            current_export = Some(v);
+                        }
+                        (Some(current_export_measurand), Ok(v)) => {
+                            current_export = Some(current_export_measurand + v);
+                        }
+                        _ => {}
+                    };
+                }
                 Some(rust_ocpp::v1_6::types::Measurand::CurrentImport) => {
                     match (current_import, sampled_value.value.parse::<f64>()) {
                         (None, Ok(v)) => {
@@ -49,6 +68,17 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
                     charge_point_state.measurand.frequency =
                         sampled_value.value.parse::<f64>().ok();
                 }
+                Some(rust_ocpp::v1_6::types::Measurand::PowerActiveExport) => {
+                    match (power_active_export, sampled_value.value.parse::<f64>()) {
+                        (None, Ok(v)) => {
+                            power_active_export = Some(v);
+                        }
+                        (Some(power_active_export_measurand), Ok(v)) => {
+                            power_active_export = Some(power_active_export_measurand + v);
+                        }
+                        _ => {}
+                    };
+                }
                 Some(rust_ocpp::v1_6::types::Measurand::PowerActiveImport) => {
                     match (power_active_import, sampled_value.value.parse::<f64>()) {
                         (None, Ok(v)) => {
@@ -59,6 +89,65 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
                         }
                         _ => {}
                     };
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::PowerFactor) => {
+                    charge_point_state.measurand.power_factor =
+                        match sampled_value.value.parse::<f64>() {
+                            Ok(v) => Some(v),
+                            _ => None,
+                        }
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::PowerOffered) => {
+                    charge_point_state.measurand.power_offered =
+                        match sampled_value.value.parse::<f64>() {
+                            Ok(v) => match sampled_value.unit {
+                                Some(UnitOfMeasure::Kw) => Some(v * 1000.0),
+                                _ => Some(v),
+                            },
+                            _ => None,
+                        }
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::PowerReactiveExport) => {
+                    match (power_reactive_export, sampled_value.value.parse::<f64>()) {
+                        (None, Ok(v)) => {
+                            power_reactive_export = Some(v);
+                        }
+                        (Some(power_reactive_export_measurand), Ok(v)) => {
+                            power_reactive_export = Some(power_reactive_export_measurand + v);
+                        }
+                        _ => {}
+                    };
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::PowerReactiveImport) => {
+                    match (power_reactive_import, sampled_value.value.parse::<f64>()) {
+                        (None, Ok(v)) => {
+                            power_reactive_import = Some(v);
+                        }
+                        (Some(power_reactive_import_measurand), Ok(v)) => {
+                            power_reactive_import = Some(power_reactive_import_measurand + v);
+                        }
+                        _ => {}
+                    };
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::Rpm) => {
+                    charge_point_state.measurand.rpm = match sampled_value.value.parse::<f64>() {
+                        Ok(v) => Some(v),
+                        _ => None,
+                    }
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::SoC) => {
+                    charge_point_state.measurand.state_of_charge =
+                        match sampled_value.value.parse::<f64>() {
+                            Ok(v) => Some(v),
+                            _ => None,
+                        }
+                }
+                Some(rust_ocpp::v1_6::types::Measurand::Temperature) => {
+                    charge_point_state.measurand.temperature =
+                        match sampled_value.value.parse::<f64>() {
+                            Ok(v) => Some(v),
+                            _ => None,
+                        }
                 }
                 Some(rust_ocpp::v1_6::types::Measurand::Voltage) => {
                     match (system_voltage, sampled_value.value.parse::<f64>()) {
@@ -71,16 +160,6 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
                         _ => {}
                     };
                 }
-                Some(rust_ocpp::v1_6::types::Measurand::PowerOffered) => {
-                    charge_point_state.measurand.power_offered =
-                        match sampled_value.value.parse::<f64>() {
-                            Ok(v) => match sampled_value.unit {
-                                Some(UnitOfMeasure::Kw) => Some(v * 1000.0),
-                                _ => Some(v),
-                            },
-                            _ => None,
-                        }
-                }
                 _ => {}
             }
         }
@@ -89,6 +168,8 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
     charge_point_state.measurand.current_import = current_import;
     charge_point_state.measurand.power_active_import = power_active_import;
     charge_point_state.measurand.voltage = system_voltage;
+    charge_point_state.measurand.power_reactive_export = power_reactive_export;
+    charge_point_state.measurand.power_reactive_import = power_reactive_import;
 
     if let Some(current_offered) = charge_point_state.measurand.current_offered
         && let Some(power_offered) = charge_point_state.measurand.power_offered
