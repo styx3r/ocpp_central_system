@@ -9,6 +9,48 @@ use log::{error, info};
 
 //-------------------------------------------------------------------------------------------------
 
+macro_rules! sample_value {
+    ($measurand_type:pat, $sampled_value:expr, $destination:expr) => {
+        match $sampled_value.measurand {
+            Some($measurand_type) => {
+                match $sampled_value.value.parse::<f64>() {
+                    Ok(v) => match $sampled_value.unit {
+                        Some(UnitOfMeasure::Kw) => {
+                            $destination = Some(v * 1000.0);
+                        }
+                        _ => {
+                            $destination = Some(v);
+                        }
+                    },
+                    _ => {}
+                };
+            }
+            _ => {}
+        }
+    };
+}
+
+macro_rules! sample_value_from_all_phases {
+    ($measurand_type:pat, $sampled_value:expr, $destination:expr) => {
+        match $sampled_value.measurand {
+            Some($measurand_type) => {
+                match ($destination, $sampled_value.value.parse::<f64>()) {
+                    (None, Ok(v)) => {
+                        $destination = Some(v);
+                    }
+                    (Some(destination), Ok(v)) => {
+                        $destination = Some(destination + v);
+                    }
+                    _ => {}
+                };
+            }
+            _ => {}
+        }
+    };
+}
+
+//-------------------------------------------------------------------------------------------------
+
 pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
     meter_values_request: &meter_values::MeterValuesRequest,
     charge_point_state: &mut ChargePointState,
@@ -16,160 +58,120 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
 ) -> Result<meter_values::MeterValuesResponse, CustomError> {
     info!("Received {}", MessageTypeName::MeterValues);
 
-    let mut current_export: Option<f64> = None;
-    let mut current_import: Option<f64> = None;
-
-    let mut power_active_export: Option<f64> = None;
-    let mut power_active_import: Option<f64> = None;
-
-    let mut power_reactive_export: Option<f64> = None;
-    let mut power_reactive_import: Option<f64> = None;
-
-    let mut system_voltage: Option<f64> = None;
-
     for meter_value in &meter_values_request.meter_value {
         for sampled_value in &meter_value.sampled_value {
-            match sampled_value.measurand {
-                Some(rust_ocpp::v1_6::types::Measurand::CurrentExport) => {
-                    match (current_export, sampled_value.value.parse::<f64>()) {
-                        (None, Ok(v)) => {
-                            current_export = Some(v);
-                        }
-                        (Some(current_export_measurand), Ok(v)) => {
-                            current_export = Some(current_export_measurand + v);
-                        }
-                        _ => {}
-                    };
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::CurrentImport) => {
-                    match (current_import, sampled_value.value.parse::<f64>()) {
-                        (None, Ok(v)) => {
-                            current_import = Some(v);
-                        }
-                        (Some(current_import_measurand), Ok(v)) => {
-                            current_import = Some(current_import_measurand + v);
-                        }
-                        _ => {}
-                    };
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::CurrentOffered) => {
-                    charge_point_state.measurand.current_offered =
-                        sampled_value.value.parse::<f64>().ok();
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::EnergyActiveImportRegister) => {
-                    charge_point_state.measurand.energy_active_import_register =
-                        sampled_value.value.parse::<f64>().ok();
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::EnergyReactiveImportRegister) => {
-                    charge_point_state.measurand.energy_reactive_import_register =
-                        sampled_value.value.parse::<f64>().ok();
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::Frequency) => {
-                    charge_point_state.measurand.frequency =
-                        sampled_value.value.parse::<f64>().ok();
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::PowerActiveExport) => {
-                    match (power_active_export, sampled_value.value.parse::<f64>()) {
-                        (None, Ok(v)) => {
-                            power_active_export = Some(v);
-                        }
-                        (Some(power_active_export_measurand), Ok(v)) => {
-                            power_active_export = Some(power_active_export_measurand + v);
-                        }
-                        _ => {}
-                    };
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::PowerActiveImport) => {
-                    match (power_active_import, sampled_value.value.parse::<f64>()) {
-                        (None, Ok(v)) => {
-                            power_active_import = Some(v);
-                        }
-                        (Some(power_active_import_measurand), Ok(v)) => {
-                            power_active_import = Some(power_active_import_measurand + v);
-                        }
-                        _ => {}
-                    };
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::PowerFactor) => {
-                    charge_point_state.measurand.power_factor =
-                        match sampled_value.value.parse::<f64>() {
-                            Ok(v) => Some(v),
-                            _ => None,
-                        }
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::PowerOffered) => {
-                    charge_point_state.measurand.power_offered =
-                        match sampled_value.value.parse::<f64>() {
-                            Ok(v) => match sampled_value.unit {
-                                Some(UnitOfMeasure::Kw) => Some(v * 1000.0),
-                                _ => Some(v),
-                            },
-                            _ => None,
-                        }
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::PowerReactiveExport) => {
-                    match (power_reactive_export, sampled_value.value.parse::<f64>()) {
-                        (None, Ok(v)) => {
-                            power_reactive_export = Some(v);
-                        }
-                        (Some(power_reactive_export_measurand), Ok(v)) => {
-                            power_reactive_export = Some(power_reactive_export_measurand + v);
-                        }
-                        _ => {}
-                    };
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::PowerReactiveImport) => {
-                    match (power_reactive_import, sampled_value.value.parse::<f64>()) {
-                        (None, Ok(v)) => {
-                            power_reactive_import = Some(v);
-                        }
-                        (Some(power_reactive_import_measurand), Ok(v)) => {
-                            power_reactive_import = Some(power_reactive_import_measurand + v);
-                        }
-                        _ => {}
-                    };
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::Rpm) => {
-                    charge_point_state.measurand.rpm = match sampled_value.value.parse::<f64>() {
-                        Ok(v) => Some(v),
-                        _ => None,
-                    }
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::SoC) => {
-                    charge_point_state.measurand.state_of_charge =
-                        match sampled_value.value.parse::<f64>() {
-                            Ok(v) => Some(v),
-                            _ => None,
-                        }
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::Temperature) => {
-                    charge_point_state.measurand.temperature =
-                        match sampled_value.value.parse::<f64>() {
-                            Ok(v) => Some(v),
-                            _ => None,
-                        }
-                }
-                Some(rust_ocpp::v1_6::types::Measurand::Voltage) => {
-                    match (system_voltage, sampled_value.value.parse::<f64>()) {
-                        (None, Ok(v)) => {
-                            system_voltage = Some(v);
-                        }
-                        (Some(latest_voltage_measurand), Ok(v)) => {
-                            system_voltage = Some(latest_voltage_measurand + v);
-                        }
-                        _ => {}
-                    };
-                }
-                _ => {}
-            }
+            sample_value_from_all_phases!(
+                rust_ocpp::v1_6::types::Measurand::CurrentExport,
+                sampled_value,
+                charge_point_state.measurand.current_export
+            );
+            sample_value_from_all_phases!(
+                rust_ocpp::v1_6::types::Measurand::CurrentImport,
+                sampled_value,
+                charge_point_state.measurand.current_import
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::CurrentOffered,
+                sampled_value,
+                charge_point_state.measurand.current_offered
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::EnergyActiveExportRegister,
+                sampled_value,
+                charge_point_state.measurand.energy_active_export_register
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::EnergyActiveImportRegister,
+                sampled_value,
+                charge_point_state.measurand.energy_active_import_register
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::EnergyReactiveExportRegister,
+                sampled_value,
+                charge_point_state.measurand.energy_reactive_export_register
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::EnergyReactiveImportRegister,
+                sampled_value,
+                charge_point_state.measurand.energy_reactive_import_register
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::EnergyActiveExportInterval,
+                sampled_value,
+                charge_point_state.measurand.energy_active_export_interval
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::EnergyActiveImportInterval,
+                sampled_value,
+                charge_point_state.measurand.energy_active_import_interval
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::EnergyReactiveExportInterval,
+                sampled_value,
+                charge_point_state.measurand.energy_reactive_export_interval
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::EnergyReactiveImportInterval,
+                sampled_value,
+                charge_point_state.measurand.energy_reactive_import_interval
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::Frequency,
+                sampled_value,
+                charge_point_state.measurand.frequency
+            );
+            sample_value_from_all_phases!(
+                rust_ocpp::v1_6::types::Measurand::PowerActiveExport,
+                sampled_value,
+                charge_point_state.measurand.power_active_export
+            );
+            sample_value_from_all_phases!(
+                rust_ocpp::v1_6::types::Measurand::PowerActiveImport,
+                sampled_value,
+                charge_point_state.measurand.power_active_import
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::PowerFactor,
+                sampled_value,
+                charge_point_state.measurand.power_factor
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::PowerOffered,
+                sampled_value,
+                charge_point_state.measurand.power_offered
+            );
+            sample_value_from_all_phases!(
+                rust_ocpp::v1_6::types::Measurand::PowerReactiveExport,
+                sampled_value,
+                charge_point_state.measurand.power_reactive_export
+            );
+            sample_value_from_all_phases!(
+                rust_ocpp::v1_6::types::Measurand::PowerReactiveImport,
+                sampled_value,
+                charge_point_state.measurand.power_reactive_import
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::Rpm,
+                sampled_value,
+                charge_point_state.measurand.rpm
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::SoC,
+                sampled_value,
+                charge_point_state.measurand.state_of_charge
+            );
+            sample_value!(
+                rust_ocpp::v1_6::types::Measurand::Temperature,
+                sampled_value,
+                charge_point_state.measurand.temperature
+            );
+            sample_value_from_all_phases!(
+                rust_ocpp::v1_6::types::Measurand::Voltage,
+                sampled_value,
+                charge_point_state.measurand.voltage
+            );
         }
     }
-
-    charge_point_state.measurand.current_import = current_import;
-    charge_point_state.measurand.power_active_import = power_active_import;
-    charge_point_state.measurand.voltage = system_voltage;
-    charge_point_state.measurand.power_reactive_export = power_reactive_export;
-    charge_point_state.measurand.power_reactive_import = power_reactive_import;
 
     if let Some(current_offered) = charge_point_state.measurand.current_offered
         && let Some(power_offered) = charge_point_state.measurand.power_offered
