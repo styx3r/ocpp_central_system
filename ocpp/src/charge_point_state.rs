@@ -79,9 +79,6 @@ pub struct ChargePointState {
     /// Measurand values received by a MeterValuesRequest.
     pub(crate) measurand: Measurand,
 
-    /// Calculated cos(phi). Will be populated on the first received MeterValuesRequest.
-    pub(crate) latest_cos_phi: Option<f64>,
-
     /// Max. charging current calculated with I = P / (U * cos(phi)). Where P is the maximum power
     /// specified in the config which shall be offered.
     pub(crate) max_current: Option<f64>,
@@ -104,10 +101,9 @@ pub struct ChargePointState {
 }
 
 impl ChargePointState {
-    pub fn new(cos_phi: f64, power: f64, current: f64, voltage: f64) -> Self {
+    pub fn new(power: f64, current: f64, voltage: f64) -> Self {
         Self {
             charge_point_status: None,
-            latest_cos_phi: Some(cos_phi),
             measurand: Measurand {
                 current_export: None,
                 current_import: None,
@@ -143,10 +139,6 @@ impl ChargePointState {
 
     pub fn get_charge_point_status(&self) -> &Option<ChargePointStatus> {
         &self.charge_point_status
-    }
-
-    pub fn get_latest_cos_phi(&self) -> Option<f64> {
-        self.latest_cos_phi
     }
 
     pub fn get_latest_power_offered(&self) -> Option<f64> {
@@ -209,10 +201,6 @@ impl ChargePointState {
 
     pub fn set_charge_point_status(&mut self, status: ChargePointStatus) {
         self.charge_point_status = Some(status);
-    }
-
-    pub fn set_latest_cos_phi(&mut self, cos_phi: f64) {
-        self.latest_cos_phi = Some(cos_phi);
     }
 
     pub fn set_max_current(&mut self, max_current: f64) {

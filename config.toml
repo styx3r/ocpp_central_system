@@ -17,11 +17,11 @@ moving_window_size_in_minutes = 15
 
 [[id_tags]]
 id = ""
-smart_charging = false
+smart_charging_mode = "Instant"
 
 [[id_tags]]
 id = ""
-smart_charging = true
+smart_charging_mode = "Instant"
 
 [websocket]
 ip = "0.0.0.0"

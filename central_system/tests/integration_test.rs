@@ -299,6 +299,7 @@ fn build_meter_values_request(
     voltage_per_phase: (f64, f64, f64),
     power_offered: f64,
     current_offered: f64,
+    power_active_imported: (f64, f64, f64),
 ) -> serde_json::Value {
     json!({
         "connectorId": 1,
@@ -349,6 +350,33 @@ fn build_meter_values_request(
                     "measurand": "Current.Offered",
                     "location": "Outlet",
                     "unit": "A"
+                },
+                {
+                    "value": power_active_imported.0.to_string(),
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Power.Active.Import",
+                    "location": "Outlet",
+                    "phase": "L1",
+                    "unit": "kW"
+                },
+                {
+                    "value": power_active_imported.1.to_string(),
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Power.Active.Import",
+                    "location": "Outlet",
+                    "phase": "L2",
+                    "unit": "kW"
+                },
+                {
+                    "value": power_active_imported.2.to_string(),
+                    "context": "Sample.Periodic",
+                    "format": "Raw",
+                    "measurand": "Power.Active.Import",
+                    "location": "Outlet",
+                    "phase": "L3",
+                    "unit": "kW"
                 }
             ]
         } ]
@@ -895,7 +923,7 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
     // Sending updated MeterValues request to simulate a change of cos(phi)
     websocket.send(tungstenite::Message::text(format!(
         "[2,\"12345\",\"MeterValues\",{}]",
-        build_meter_values_request((180.0, 180.0, 180.0), 11.0, 5.0)
+        build_meter_values_request((180.0, 180.0, 180.0), 11.0, 5.0, (0.0, 0.0, 0.0))
     )))?;
 
     validate_response_message(
@@ -1086,10 +1114,7 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
     let mut integration_test = common::IntegrationTest::new(config.clone());
 
     let mut websocket = integration_test.setup();
-    validate_initial_messages_with_config_parameters(
-        &mut websocket,
-        &vec![config_setting],
-    )?;
+    validate_initial_messages_with_config_parameters(&mut websocket, &vec![config_setting])?;
 
     let now = Utc::now();
     let start_timestamp = now + Duration::hours(1);
@@ -1275,9 +1300,33 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
             .block_battery_for_duration_called
     );
 
+    {
+        integration_test
+            .awattar_mock
+            .lock()
+            .unwrap()
+            .set_response(Period {
+                start_timestamp: start_timestamp.timestamp_millis(),
+                end_timestamp: end_timestamp.timestamp_millis(),
+                average_price: 20.0,
+            });
+
+        // Simulating a load of 11400W where 100W are used to charge the battery.
+        // PV production is set to 14kW.
+        integration_test
+            .fronius_mock
+            .lock()
+            .unwrap()
+            .power_flow_realtime_data = Some(default_powerflow_realtime_data(
+            Some(-11300.0),
+            Some(-100.0),
+            Some(14000.0),
+        ));
+    }
+
     websocket.send(tungstenite::Message::text(format!(
         "[2,\"12345\",\"MeterValues\",{}]",
-        build_meter_values_request((219.0, 219.0, 219.0), 11.0, 16.0)
+        build_meter_values_request((219.0, 219.0, 219.0), 11.0, 16.0, (3.7, 3.7, 3.7))
     )))?;
 
     validate_response_message(
@@ -1383,14 +1432,14 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
     }
 
     {
-        // Simulating a load of 400W where 100W are used to charge the battery.
+        // Simulating a load of 11400W where 100W are used to charge the battery.
         // PV production is set to 1kW which is expected to clear the PV based ChargingProfile.
         integration_test
             .fronius_mock
             .lock()
             .unwrap()
             .power_flow_realtime_data = Some(default_powerflow_realtime_data(
-            Some(-300.0),
+            Some(-11300.0),
             Some(-100.0),
             Some(1000.0),
         ));
@@ -1398,7 +1447,7 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
 
     websocket.send(tungstenite::Message::text(format!(
         "[2,\"12345\",\"MeterValues\",{}]",
-        build_meter_values_request((219.0, 219.0, 219.0), 11.0, 16.0)
+        build_meter_values_request((219.0, 219.0, 219.0), 11.0, 16.0, (3.7, 3.7, 3.7))
     )))?;
 
     validate_response_message(

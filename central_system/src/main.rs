@@ -112,9 +112,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         // `d` is a local variable.
         Ok(d) => d,
         // Handle the `error` case.
-        Err(_) => {
+        Err(e) => {
             // Write `msg` to `stderr`.
-            panic!("Unable to load data from `{}`", args.config_path);
+            panic!("Unable to load data from `{}`: {}", args.config_path, e.message());
         }
     };
 

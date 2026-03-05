@@ -37,6 +37,8 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
         &mut self,
         charging_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        self.calculate_cos_phi(charging_point_state)?;
+
         let possible_pv_charging_current = self.calculate_possible_pv_charging_current(
             charging_point_state,
             Arc::clone(&self.fronius_api),
@@ -291,7 +293,7 @@ mod tests {
             .power_flow_realtime_data = Some(default_powerflow_realtime_data());
 
         let mut charge_point_state = ChargePointState::default();
-        hook.lock().unwrap().evaluate(&mut charge_point_state)?;
+        assert!(hook.lock().unwrap().evaluate(&mut charge_point_state).is_err());
 
         Ok(())
     }
@@ -312,12 +314,11 @@ mod tests {
             .unwrap()
             .power_flow_realtime_data = Some(default_powerflow_realtime_data());
 
-        static COS_PHI: f64 = 0.9988504095416009;
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
         static VOLTAGE: f64 = 695.9;
 
-        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
         hook.lock().unwrap().evaluate(&mut charge_point_state)?;
 
         let request_to_send = charge_point_state.get_requests_to_send().first();
@@ -383,12 +384,11 @@ mod tests {
             test_config(),
         )));
 
-        static COS_PHI: f64 = 0.9988504095416009;
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
         static VOLTAGE: f64 = 695.9;
 
-        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
         charge_point_state.set_max_current(15.0);
 
         hook.lock().unwrap().evaluate(&mut charge_point_state)?;
@@ -432,12 +432,11 @@ mod tests {
             .unwrap()
             .power_flow_realtime_data = Some(power_flow_realtime_data);
 
-        static COS_PHI: f64 = 0.9988504095416009;
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
         static VOLTAGE: f64 = 695.9;
 
-        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
         charge_point_state.set_max_current(15.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
 
@@ -544,12 +543,11 @@ mod tests {
             .unwrap()
             .power_flow_realtime_data = Some(power_flow_realtime_data);
 
-        static COS_PHI: f64 = 0.9988504095416009;
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
         static VOLTAGE: f64 = 695.9;
 
-        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
         charge_point_state.set_max_current(4.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
         charge_point_state.add_charging_profile(&ChargingProfile {
@@ -730,12 +728,11 @@ mod tests {
             .unwrap()
             .power_flow_realtime_data = Some(power_flow_realtime_data);
 
-        static COS_PHI: f64 = 0.9988504095416009;
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
         static VOLTAGE: f64 = 695.9;
 
-        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
         charge_point_state.set_max_current(4.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProduction);
 
@@ -833,12 +830,11 @@ mod tests {
             .unwrap()
             .power_flow_realtime_data = Some(power_flow_realtime_data);
 
-        static COS_PHI: f64 = 0.9988504095416009;
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
         static VOLTAGE: f64 = 695.9;
 
-        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
         charge_point_state.set_max_current(15.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
 
@@ -883,12 +879,11 @@ mod tests {
             .unwrap()
             .power_flow_realtime_data = Some(power_flow_realtime_data);
 
-        static COS_PHI: f64 = 0.9988504095416009;
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
         static VOLTAGE: f64 = 695.9;
 
-        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
         charge_point_state.set_max_current(15.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
         charge_point_state.add_charging_profile(&ChargingProfile {
@@ -975,12 +970,11 @@ mod tests {
             .unwrap()
             .power_flow_realtime_data = Some(power_flow_realtime_data);
 
-        static COS_PHI: f64 = 0.9988504095416009;
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
         static VOLTAGE: f64 = 695.9;
 
-        let mut charge_point_state = ChargePointState::new(COS_PHI, POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
         charge_point_state.set_max_current(15.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
         charge_point_state.add_charging_profile(&ChargingProfile {

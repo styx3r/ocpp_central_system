@@ -48,6 +48,8 @@ pub struct OcppHooks<T: FroniusApi, U: AwattarApi> {
     config: config::Config,
     /// Vector of calculated PV overproduction
     pv_overproduction: Vec<f64>,
+    /// Calculated cos(phi). Will be populated on the first received MeterValuesRequest.
+    latest_cos_phi: Option<f64>,
 }
 
 impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
@@ -62,7 +64,38 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             awattar_api,
             config,
             pv_overproduction: vec![],
+            latest_cos_phi: None,
         }
+    }
+
+    /// Calculates the maximum possible current as P_max / (V_charging_point * cos(phi)).
+    /// NOTE: The calculated current will always be in the interval `[minimum_charging_current, default_current]`
+    ///       where both values are configurable.
+    fn calculate_max_current(
+        &self,
+        charging_point_state: &mut ChargePointState,
+    ) -> Result<f64, CustomError> {
+        let max_charging_power: f64 = self.config.charging_point.max_charging_power.into();
+
+        let max_charging_current = (max_charging_power
+            / (charging_point_state
+                .get_latest_voltage()
+                .unwrap_or(self.config.charging_point.default_system_voltage)
+                * self
+                    .latest_cos_phi
+                    .unwrap_or(self.config.charging_point.default_cos_phi)))
+        .clamp(
+            self.config.charging_point.minimum_charging_current,
+            self.config.charging_point.default_current,
+        )
+        .floor();
+
+        info!(
+            "Calculated max. charging current with {} A",
+            max_charging_current
+        );
+
+        Ok(max_charging_current)
     }
 
     /// Calculates current possible maximum charging current (A). Returns None if the difference
@@ -71,7 +104,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         &mut self,
         charge_point_state: &mut ChargePointState,
     ) -> Option<Decimal> {
-        let limit = calculate_max_current(&self.config, charge_point_state).ok();
+        let limit = self.calculate_max_current(charge_point_state).ok();
         if limit.is_none() {
             return None;
         }
@@ -344,7 +377,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                 self.config.photo_voltaic.moving_window_size_in_minutes, pv_overproduction_average
             );
 
-            if let Some(latest_cos_phi) = charging_point_state.get_latest_cos_phi()
+            if let Some(latest_cos_phi) = self.latest_cos_phi
                 && let Some(latest_voltage) = charging_point_state.get_latest_voltage()
             {
                 let possible_charging_current =
@@ -361,36 +394,33 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
 
         None
     }
-}
 
-//-------------------------------------------------------------------------------------------------
+    fn calculate_cos_phi(
+        &mut self,
+        charging_point_state: &mut ChargePointState,
+    ) -> Result<(), CustomError> {
+        if let Some(current_offered) = charging_point_state.get_latest_current_offered()
+            && let Some(power_offered) = charging_point_state.get_latest_power_offered()
+            && let Some(voltage) = charging_point_state.get_latest_voltage()
+            && power_offered != 0.0
+            && voltage != 0.0
+            && current_offered != 0.0
+        {
+            self.latest_cos_phi = Some(power_offered / (voltage * current_offered));
 
-/// Calculates the maximum possible current as P_max / (V_charging_point * cos(phi)).
-/// NOTE: The calculated current will always be in the interval `[minimum_charging_current, default_current]`
-///       where both values are configurable.
-pub(crate) fn calculate_max_current(
-    config: &config::Config,
-    charging_point_state: &mut ChargePointState,
-) -> Result<f64, CustomError> {
-    let max_charging_power: f64 = config.charging_point.max_charging_power.into();
+            info!(
+                "Calculated cos(phi): {} / ({} * {}) = {}",
+                power_offered,
+                voltage,
+                current_offered,
+                self.latest_cos_phi.unwrap_or(1.0)
+            );
 
-    let max_charging_current = (max_charging_power
-        / (charging_point_state
-            .get_latest_voltage()
-            .unwrap_or(config.charging_point.default_system_voltage)
-            * charging_point_state
-                .get_latest_cos_phi()
-                .unwrap_or(config.charging_point.default_cos_phi)))
-    .clamp(
-        config.charging_point.minimum_charging_current,
-        config.charging_point.default_current,
-    )
-    .floor();
+            return Ok(());
+        }
 
-    info!(
-        "Calculated max. charging current with {} A",
-        max_charging_current
-    );
-
-    Ok(max_charging_current)
+        return Err(CustomError::Common(
+            "Could not calculate cos(phi)!".to_owned(),
+        ));
+    }
 }
