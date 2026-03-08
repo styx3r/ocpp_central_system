@@ -381,7 +381,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                 && let Some(latest_voltage) = charging_point_state.get_latest_voltage()
             {
                 let possible_charging_current =
-                    pv_overproduction_average / (latest_cos_phi * latest_voltage);
+                    (pv_overproduction_average / (latest_cos_phi * latest_voltage)).floor();
 
                 info!(
                     "Resulting in {} A charging current",
@@ -415,12 +415,8 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                 current_offered,
                 self.latest_cos_phi.unwrap_or(1.0)
             );
-
-            return Ok(());
         }
 
-        return Err(CustomError::Common(
-            "Could not calculate cos(phi)!".to_owned(),
-        ));
+        Ok(())
     }
 }

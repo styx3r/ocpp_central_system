@@ -293,7 +293,7 @@ mod tests {
             .power_flow_realtime_data = Some(default_powerflow_realtime_data());
 
         let mut charge_point_state = ChargePointState::default();
-        assert!(hook.lock().unwrap().evaluate(&mut charge_point_state).is_err());
+        hook.lock().unwrap().evaluate(&mut charge_point_state)?;
 
         Ok(())
     }
@@ -1047,7 +1047,7 @@ mod tests {
                 .charging_schedule_period,
             vec![ChargingSchedulePeriod {
                 start_period: 0,
-                limit: Decimal::new(127, 1),
+                limit: Decimal::new(12, 0),
                 number_phases: None
             }]
         );
