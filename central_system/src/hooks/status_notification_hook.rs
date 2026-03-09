@@ -6,7 +6,6 @@ use ocpp::{
     MessageTypeName, StatusNotificationRequest,
     clear_charging_profile_builder::ClearChargingProfileBuilder,
 };
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::{OcppHooks, hooks::CONNECTOR_ID};
@@ -46,11 +45,11 @@ fn clear_tx_charging_profiles(
 //-------------------------------------------------------------------------------------------------
 
 /// Unblocks the battery connected to the Fronius inverter and clears all active charging profiles.
-fn unblock_battery_and_clear_tx_profiles<T: FroniusApi>(
+fn unblock_battery_and_clear_tx_profiles<T: FroniusApi, U: AwattarApi>(
     charge_point_state: &mut ChargePointState,
-    fronius_api: Arc<Mutex<T>>,
+    hooks: &mut OcppHooks<T, U>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    fronius_api.lock().unwrap().fully_unblock_battery()?;
+    hooks.fronius_api.lock().unwrap().fully_unblock_battery()?;
     for charging_profile in charge_point_state.get_active_charging_profiles().clone() {
         clear_tx_charging_profiles(
             charge_point_state,
@@ -64,6 +63,7 @@ fn unblock_battery_and_clear_tx_profiles<T: FroniusApi>(
     }
 
     charge_point_state.disable_smart_charging();
+    hooks.pv_overproduction.clear();
 
     Ok(())
 }
@@ -92,9 +92,10 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
 
         let block_battery = Box::new(
             |_: &mut ChargePointState,
-             fronius_api: Arc<Mutex<T>>|
+             hooks: &mut OcppHooks<T, U>|
              -> Result<(), Box<dyn std::error::Error>> {
-                fronius_api
+                hooks
+                    .fronius_api
                     .lock()
                     .unwrap()
                     .block_battery_for_duration(&Duration::from_hours(
@@ -105,9 +106,9 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
 
         let unblock_battery = Box::new(
             |_: &mut ChargePointState,
-             fronius_api: Arc<Mutex<T>>|
+             hooks: &mut OcppHooks<T, U>|
              -> Result<(), Box<dyn std::error::Error>> {
-                fronius_api.lock().unwrap().fully_unblock_battery()
+                hooks.fronius_api.lock().unwrap().fully_unblock_battery()
             },
         );
 
@@ -118,7 +119,7 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
                 Box<
                     dyn FnMut(
                         &mut ChargePointState,
-                        Arc<Mutex<T>>,
+                        &mut OcppHooks<T, U>,
                     ) -> Result<(), Box<dyn std::error::Error>>,
                 >,
             )>,
@@ -201,7 +202,7 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
                 .iter_mut()
                 .find(|(next_state, _)| *next_state == status_notification.status)
             {
-                next_state_action(charge_point_state, Arc::clone(&self.fronius_api))?;
+                next_state_action(charge_point_state, self)?;
             } else {
                 info!(
                     "No special action for state transition from {:?} to {:?}",
@@ -235,6 +236,7 @@ mod tests {
         types::ChargePointErrorCode,
     };
     use serde::de::DeserializeOwned;
+    use std::sync::{Arc, Mutex};
 
     fn parse_message_request<T: DeserializeOwned>(payload: &str) -> T {
         let message_request =

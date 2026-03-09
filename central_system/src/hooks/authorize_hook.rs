@@ -118,6 +118,8 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
                     message_type: MessageTypeName::SetChargingProfile,
                     payload,
                 });
+
+                charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProduction);
             }
         }
 
