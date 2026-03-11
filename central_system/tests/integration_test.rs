@@ -52,51 +52,9 @@ fn default_config(websocket_port: u32, id_tags: Vec<IdTag>) -> config::Config {
 
 //-------------------------------------------------------------------------------------------------
 
-static AUTHORIZE_REQUEST: &str = r#"{"idTag": "1"}"#;
-
-static CHARGING_STATUS_NOTIFCATION: &str = r#"{
-    "connectorId": 1,
-    "errorCode": "NoError",
-    "info": "",
-    "status": "Charging",
-    "timestamp": "2026-01-18T14:09:24Z",
-    "vendorId": "Schneider Electric",
-    "vendorErrorCode": "0.0"
-}"#;
-
-static START_TRANSACTION_REQUEST_WITH_INVALID_ID: &str = r#"{
-    "connectorId": 1,
-    "idTag": "INVALID_ID_TAG",
-    "meterStart": 0,
-    "timestamp": "2026-01-18T14:09:24Z"
-}"#;
-
-static STOP_TRANSACTION_REQUEST: &str = r#"{
-    "meterStop": 253580,
-    "reason": "EVDisconnected",
-    "timestamp": "2026-02-04T05:39:05Z",
-    "transactionId": 1
-}"#;
-
-static AVAILABLE_STATUS_NOTIFCATION: &str = r#"{
-    "connectorId": 1,
-    "errorCode": "NoError",
-    "info": "",
-    "status": "Available",
-    "timestamp": "2026-01-18T14:09:24Z",
-    "vendorId": "Schneider Electric",
-    "vendorErrorCode": "0.0"
-}"#;
-
-static SUSPENDEDEV_STATUS_NOTIFCATION: &str = r#"{
-    "connectorId": 1,
-    "errorCode": "NoError",
-    "info": "",
-    "status": "SuspendedEV",
-    "timestamp": "2026-01-18T14:09:24Z",
-    "vendorId": "Schneider Electric",
-    "vendorErrorCode": "0.0"
-}"#;
+static CHARGING_STATUS_NOTIFCATION: &str = "Charging";
+static AVAILABLE_STATUS_NOTIFCATION: &str = "Available";
+static SUSPENDEDEV_STATUS_NOTIFCATION: &str = "SuspendedEV";
 
 //-------------------------------------------------------------------------------------------------
 
@@ -107,12 +65,8 @@ fn authorize_request() -> Result<(), Box<dyn Error>> {
     integration_test.setup();
     integration_test.validate_initial_messages()?;
 
-    integration_test.send_authorize_request(AUTHORIZE_REQUEST)?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": { "status": "Blocked" }}),
-    })?;
+    integration_test.send_authorize_request("1")?;
+    integration_test.validate_response_message(json!({"idTagInfo": { "status": "Blocked" }}))?;
 
     integration_test.teardown(config.log_directory.as_str());
     Ok(())
@@ -146,11 +100,7 @@ fn meter_values_request() -> Result<(), Box<dyn Error>> {
         16.0,
         (0.0, 0.0, 0.0),
     )?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({}),
-    })?;
+    integration_test.validate_response_message(json!({}))?;
 
     integration_test.teardown(config.log_directory.as_str());
     Ok(())
@@ -165,12 +115,10 @@ fn start_transaction_blocked() -> Result<(), Box<dyn Error>> {
     integration_test.setup();
     integration_test.validate_initial_messages()?;
 
-    integration_test.send_start_transaction_request(START_TRANSACTION_REQUEST_WITH_INVALID_ID)?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({ "idTagInfo": { "status": "Invalid"}, "transactionId": 1 }),
-    })?;
+    integration_test.send_start_transaction_request("INVALID_ID_TAG")?;
+    integration_test.validate_response_message(
+        json!({ "idTagInfo": { "status": "Invalid"}, "transactionId": 1 }),
+    )?;
 
     integration_test.teardown(config.log_directory.as_str());
     Ok(())
@@ -191,19 +139,10 @@ fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
     integration_test.setup();
     integration_test.validate_initial_messages()?;
 
-    static START_TRANSACTION_REQUEST: &str = r#"{
-        "connectorId": 1,
-        "idTag": "VALID_ID_TAG",
-        "meterStart": 0,
-        "timestamp": "2026-01-18T14:09:24Z"
-    }"#;
-
-    integration_test.send_start_transaction_request(START_TRANSACTION_REQUEST)?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({ "idTagInfo": { "status": "Accepted"}, "transactionId": 1 }),
-    })?;
+    integration_test.send_start_transaction_request("VALID_ID_TAG")?;
+    integration_test.validate_response_message(
+        json!({ "idTagInfo": { "status": "Accepted"}, "transactionId": 1 }),
+    )?;
 
     integration_test.teardown(config.log_directory.as_str());
     Ok(())
@@ -235,20 +174,8 @@ fn stop_transaction_blocked() -> Result<(), Box<dyn Error>> {
     integration_test.setup();
     integration_test.validate_initial_messages()?;
 
-    static STOP_TRANSACTION_REQUEST: &str = r#"{
-        "idTag": "INVALID_ID_TAG",
-        "meterStop": 20,
-        "timestamp": "2026-01-18T14:09:24Z",
-        "transactionId": 0,
-        "reason": "Local"
-    }"#;
-
-    integration_test.send_stop_transaction_request(STOP_TRANSACTION_REQUEST)?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({ "idTagInfo": { "status": "Invalid" } }),
-    })?;
+    integration_test.send_stop_transaction_request()?;
+    integration_test.validate_response_message(json!({ "idTagInfo": { "status": "Invalid" } }))?;
 
     integration_test.teardown(config.log_directory.as_str());
     Ok(())
@@ -334,14 +261,8 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
     });
 
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
-    integration_test.send_authorize_request(
-        format!("{{\"idTag\": \"{}\"}}", GRID_BASED_SMART_CHARGING_ID).as_str(),
-    )?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": { "status": "Accepted" }}),
-    })?;
+    integration_test.send_authorize_request(GRID_BASED_SMART_CHARGING_ID)?;
+    integration_test.validate_response_message(json!({"idTagInfo": { "status": "Accepted" }}))?;
 
     integration_test.validate_grid_based_profile(
         now,
@@ -349,24 +270,11 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
         end_timestamp,
         Decimal::new(16, 0),
     )?;
-    integration_test.send_start_transaction_request(
-        format!(
-            "{{
-              \"connectorId\": 1,
-              \"idTag\": \"{}\",
-              \"meterStart\": 0,
-              \"timestamp\": \"2026-01-18T14:09:24Z\"
-          }}",
-            GRID_BASED_SMART_CHARGING_ID
-        )
-        .as_str(),
-    )?;
+    integration_test.send_start_transaction_request(GRID_BASED_SMART_CHARGING_ID)?;
 
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
-    })?;
+    integration_test.validate_response_message(
+        json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
+    )?;
 
     integration_test.send_status_notification(CHARGING_STATUS_NOTIFCATION)?;
 
@@ -380,11 +288,7 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
         (0.0, 0.0, 0.0),
     )?;
 
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({}),
-    })?;
+    integration_test.validate_response_message(json!({}))?;
 
     integration_test.validate_grid_based_profile(
         now,
@@ -392,22 +296,8 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
         end_timestamp,
         Decimal::new(6, 0),
     )?;
-    integration_test.send_stop_transaction_request(
-        format!(
-            "{{
-        \"meterStop\": 253580,
-        \"reason\": \"EVDisconnected\",
-        \"timestamp\": \"2026-02-04T05:39:05Z\",
-        \"transactionId\": 1
-    }}"
-        )
-        .as_str(),
-    )?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": {"status": "Accepted"}}),
-    })?;
+    integration_test.send_stop_transaction_request()?;
+    integration_test.validate_response_message(json!({"idTagInfo": {"status": "Accepted"}}))?;
 
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
 
@@ -471,40 +361,19 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
     integration_test.set_power_flow_realtime_data(-300.0, -100.0, 14000.0);
 
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
-    integration_test.send_authorize_request(
-        format!("{{\"idTag\": \"{}\"}}", GRID_BASED_SMART_CHARGING_ID).as_str(),
-    )?;
+    integration_test.send_authorize_request(GRID_BASED_SMART_CHARGING_ID)?;
 
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": { "status": "Accepted" }}),
-    })?;
+    integration_test.validate_response_message(json!({"idTagInfo": { "status": "Accepted" }}))?;
     integration_test.validate_grid_based_profile(
         now,
         start_timestamp,
         end_timestamp,
         Decimal::new(16, 0),
     )?;
-    integration_test.send_start_transaction_request(
-        format!(
-            "{{
-              \"connectorId\": 1,
-              \"idTag\": \"{}\",
-              \"meterStart\": 0,
-              \"timestamp\": \"2026-01-18T14:09:24Z\"
-          }}",
-            GRID_BASED_SMART_CHARGING_ID
-        )
-        .as_str(),
+    integration_test.send_start_transaction_request(GRID_BASED_SMART_CHARGING_ID)?;
+    integration_test.validate_response_message(
+        json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
     )?;
-
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
-    })?;
-
     integration_test.send_status_notification(CHARGING_STATUS_NOTIFCATION)?;
 
     assert!(integration_test.block_battery_for_duration_called());
@@ -526,11 +395,7 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
         (3.7, 3.7, 3.7),
     )?;
 
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({}),
-    })?;
+    integration_test.validate_response_message(json!({}))?;
 
     integration_test.validate_pv_based_profile(Decimal::new(16, 0))?;
 
@@ -544,11 +409,7 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
         (3.7, 3.7, 3.7),
     )?;
 
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({}),
-    })?;
+    integration_test.validate_response_message(json!({}))?;
     let request_uuid = integration_test.validate_request_message(
         &common::ExpectedJSONRequestFormat {
             message_id: 2,
@@ -559,23 +420,8 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
     )?;
 
     integration_test.send_accepted_response(request_uuid.as_str())?;
-    integration_test.send_stop_transaction_request(
-        format!(
-            "{{
-        \"meterStop\": 253580,
-        \"reason\": \"EVDisconnected\",
-        \"timestamp\": \"2026-02-04T05:39:05Z\",
-        \"transactionId\": 1
-    }}"
-        )
-        .as_str(),
-    )?;
-
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": {"status": "Accepted"}}),
-    })?;
+    integration_test.send_stop_transaction_request()?;
+    integration_test.validate_response_message(json!({"idTagInfo": {"status": "Accepted"}}))?;
 
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
 
@@ -590,7 +436,6 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
 #[test]
 fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
     static PV_SMART_CHARGING_ID: &str = "PV_SMART_CHARGING";
-    let authorize_request = format!("{{\"idTag\": \"{}\"}}", PV_SMART_CHARGING_ID);
     let mut config = default_config(
         8092,
         vec![IdTag {
@@ -620,32 +465,14 @@ fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
     // PV production is set to 14kW.
     integration_test.set_power_flow_realtime_data(-300.0, -100.0, 1000.0);
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
-    integration_test.send_authorize_request(authorize_request.as_str())?;
+    integration_test.send_authorize_request(PV_SMART_CHARGING_ID)?;
 
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": { "status": "Accepted" }}),
-    })?;
-
+    integration_test.validate_response_message(json!({"idTagInfo": { "status": "Accepted" }}))?;
     integration_test.validate_pv_preparation_profile(Utc::now())?;
-
-    let start_transaction_request = format!(
-        "{{
-            \"connectorId\": 1,
-            \"idTag\": \"{}\",
-            \"meterStart\": 0,
-            \"timestamp\": \"2026-01-18T14:09:24Z\"
-        }}",
-        PV_SMART_CHARGING_ID
-    );
-    integration_test.send_start_transaction_request(start_transaction_request.as_str())?;
-
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
-    })?;
+    integration_test.send_start_transaction_request(PV_SMART_CHARGING_ID)?;
+    integration_test.validate_response_message(
+        json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
+    )?;
 
     integration_test.send_status_notification(CHARGING_STATUS_NOTIFCATION)?;
 
@@ -661,11 +488,7 @@ fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
         (3.7, 3.7, 3.7),
     )?;
 
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({}),
-    })?;
+    integration_test.validate_response_message(json!({}))?;
     integration_test.validate_pv_based_profile(Decimal::new(16, 0))?;
 
     // Simulating a load of 11400W where 100W are used to charge the battery.
@@ -678,11 +501,7 @@ fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
         (3.7, 3.7, 3.7),
     )?;
 
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({}),
-    })?;
+    integration_test.validate_response_message(json!({}))?;
     let request_uuid = integration_test.validate_request_message(
         &common::ExpectedJSONRequestFormat {
             message_id: 2,
@@ -693,14 +512,8 @@ fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
     )?;
 
     integration_test.send_accepted_response(request_uuid.as_str())?;
-    integration_test.send_stop_transaction_request(STOP_TRANSACTION_REQUEST)?;
-
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": {"status": "Accepted"}}),
-    })?;
-
+    integration_test.send_stop_transaction_request()?;
+    integration_test.validate_response_message(json!({"idTagInfo": {"status": "Accepted"}}))?;
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
 
     assert!(integration_test.unblock_battery_called());
@@ -714,7 +527,6 @@ fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
 #[test]
 fn repeated_pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
     static PV_SMART_CHARGING_ID: &str = "PV_SMART_CHARGING";
-    let authorize_request = format!("{{\"idTag\": \"{}\"}}", PV_SMART_CHARGING_ID);
     let mut config = default_config(
         8093,
         vec![IdTag {
@@ -744,32 +556,14 @@ fn repeated_pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Err
     // PV production is set to 14kW.
     integration_test.set_power_flow_realtime_data(-300.0, -100.0, 1000.0);
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
-    integration_test.send_authorize_request(authorize_request.as_str())?;
+    integration_test.send_authorize_request(PV_SMART_CHARGING_ID)?;
 
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": { "status": "Accepted" }}),
-    })?;
-
+    integration_test.validate_response_message(json!({"idTagInfo": { "status": "Accepted" }}))?;
     integration_test.validate_pv_preparation_profile(Utc::now())?;
-
-    let start_transaction_request = format!(
-        "{{
-            \"connectorId\": 1,
-            \"idTag\": \"{}\",
-            \"meterStart\": 0,
-            \"timestamp\": \"2026-01-18T14:09:24Z\"
-        }}",
-        PV_SMART_CHARGING_ID
-    );
-    integration_test.send_start_transaction_request(start_transaction_request.as_str())?;
-
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
-    })?;
+    integration_test.send_start_transaction_request(PV_SMART_CHARGING_ID)?;
+    integration_test.validate_response_message(
+        json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
+    )?;
 
     integration_test.send_status_notification(CHARGING_STATUS_NOTIFCATION)?;
 
@@ -785,20 +579,12 @@ fn repeated_pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Err
             16.0,
             (3.7, 3.7, 3.7),
         )?;
-        integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-            message_id: 3,
-            uuid: "12345".to_owned(),
-            json: json!({}),
-        })?;
+        integration_test.validate_response_message(json!({}))?;
     }
 
     integration_test.validate_pv_based_profile(Decimal::new(16, 0))?;
-    integration_test.send_stop_transaction_request(STOP_TRANSACTION_REQUEST)?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": {"status": "Accepted"}}),
-    })?;
+    integration_test.send_stop_transaction_request()?;
+    integration_test.validate_response_message(json!({"idTagInfo": {"status": "Accepted"}}))?;
 
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
     let request_uuid = integration_test.validate_request_message(
@@ -817,20 +603,14 @@ fn repeated_pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Err
     // Start another transaction. It is expected that NO power will be supplied because not enough
     // measured values have been gathered.
 
-    integration_test.send_authorize_request(authorize_request.as_str())?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": { "status": "Accepted" }}),
-    })?;
+    integration_test.send_authorize_request(PV_SMART_CHARGING_ID)?;
+    integration_test.validate_response_message(json!({"idTagInfo": { "status": "Accepted" }}))?;
     integration_test.validate_pv_preparation_profile(Utc::now())?;
 
-    integration_test.send_start_transaction_request(start_transaction_request.as_str())?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
-    })?;
+    integration_test.send_start_transaction_request(PV_SMART_CHARGING_ID)?;
+    integration_test.validate_response_message(
+        json!({"idTagInfo": {"status": "Accepted"}, "transactionId": 1}),
+    )?;
 
     // Simulating a load of 11400W where 100W are used to charge the battery.
     // PV production is set to 14kW.
@@ -841,18 +621,10 @@ fn repeated_pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Err
         16.0,
         (3.7, 3.7, 3.7),
     )?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({}),
-    })?;
+    integration_test.validate_response_message(json!({}))?;
 
-    integration_test.send_stop_transaction_request(STOP_TRANSACTION_REQUEST)?;
-    integration_test.validate_response_message(&common::ExpectedJSONResponseFormat {
-        message_id: 3,
-        uuid: "12345".to_owned(),
-        json: json!({"idTagInfo": {"status": "Accepted"}}),
-    })?;
+    integration_test.send_stop_transaction_request()?;
+    integration_test.validate_response_message(json!({"idTagInfo": {"status": "Accepted"}}))?;
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
 
     integration_test.teardown(config.log_directory.as_str());

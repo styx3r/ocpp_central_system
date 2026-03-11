@@ -126,13 +126,20 @@ impl IntegrationTest {
 
     pub fn validate_response_message(
         &mut self,
-        expected_message: &ExpectedJSONResponseFormat,
+        json: serde_json::Value,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match serde_json::from_str::<ExpectedJSONResponseFormat>(
             self.websocket.as_mut().unwrap().read()?.to_text()?,
         ) {
             Ok(response) => {
-                assert_eq!(response, *expected_message);
+                assert_eq!(
+                    response,
+                    ExpectedJSONResponseFormat {
+                        message_id: 3,
+                        uuid: "12345".to_owned(),
+                        json,
+                    }
+                );
             }
             _ => assert!(false),
         }
@@ -489,10 +496,7 @@ impl IntegrationTest {
         Ok(())
     }
 
-    pub fn validate_pv_based_profile(
-        &mut self,
-        limit: Decimal,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn validate_pv_based_profile(&mut self, limit: Decimal) -> Result<(), Box<dyn Error>> {
         match serde_json::from_str::<ExpectedJSONRequestFormat>(
             self.websocket.as_mut().unwrap().read()?.to_text()?,
         ) {
@@ -809,27 +813,33 @@ impl IntegrationTest {
             )))?)
     }
 
-    pub fn send_authorize_request(&mut self, request: &str) -> Result<(), Box<dyn Error>> {
+    pub fn send_authorize_request(&mut self, id_tag: &str) -> Result<(), Box<dyn Error>> {
         Ok(self
             .websocket
             .as_mut()
             .unwrap()
             .send(tungstenite::Message::text(format!(
-                "[2,\"12345\",\"Authorize\",{}]",
-                request
+                "[2,\"12345\",\"Authorize\",{{ \"idTag\": \"{}\"}}]",
+                id_tag
             )))?)
     }
 
     pub fn send_status_notification(
         &mut self,
-        payload: &str,
+        status: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.websocket
             .as_mut()
             .unwrap()
             .send(tungstenite::Message::text(format!(
-                "[2,\"12345\",\"StatusNotification\",{}]",
-                payload
+                "[2,\"12345\",\"StatusNotification\",{{\"connectorId\": 1,
+                    \"errorCode\": \"NoError\",
+                    \"info\": \"\",
+                    \"status\": \"{}\",
+                    \"timestamp\": \"2026-01-18T14:09:24Z\",
+                    \"vendorId\": \"Schneider Electric\",
+                    \"vendorErrorCode\": \"0.0\"}}]",
+                status
             )))?;
 
         match serde_json::from_str::<ExpectedJSONResponseFormat>(
@@ -846,31 +856,41 @@ impl IntegrationTest {
         Ok(())
     }
 
-    pub fn send_start_transaction_request(
-        &mut self,
-        request: &str,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn send_start_transaction_request(&mut self, id_tag: &str) -> Result<(), Box<dyn Error>> {
+        let start_transaction_request = format!(
+            "{{
+                \"connectorId\": 1,
+                \"idTag\": \"{}\",
+                \"meterStart\": 0,
+                \"timestamp\": \"2026-01-18T14:09:24Z\"
+            }}",
+            id_tag
+        );
         Ok(self
             .websocket
             .as_mut()
             .unwrap()
             .send(tungstenite::Message::text(format!(
                 "[2,\"12345\",\"StartTransaction\",{}]",
-                request
+                start_transaction_request
             )))?)
     }
 
-    pub fn send_stop_transaction_request(
-        &mut self,
-        request: &str,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn send_stop_transaction_request(&mut self) -> Result<(), Box<dyn Error>> {
+        static STOP_TRANSACTION_REQUEST: &str = r#"{
+            "meterStop": 253580,
+            "reason": "EVDisconnected",
+            "timestamp": "2026-02-04T05:39:05Z",
+            "transactionId": 1
+        }"#;
+
         Ok(self
             .websocket
             .as_mut()
             .unwrap()
             .send(tungstenite::Message::text(format!(
                 "[2,\"12345\",\"StopTransaction\",{}]",
-                request
+                STOP_TRANSACTION_REQUEST
             )))?)
     }
 
@@ -879,8 +899,6 @@ impl IntegrationTest {
             .websocket
             .as_mut()
             .unwrap()
-            .send(tungstenite::Message::text(
-                "[2,\"12345\",\"Heartbeat\",{}]",
-            ))?)
+            .send(tungstenite::Message::text("[2,\"12345\",\"Heartbeat\",{}]"))?)
     }
 }
