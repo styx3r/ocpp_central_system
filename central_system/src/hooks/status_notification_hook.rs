@@ -187,10 +187,14 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
             ),
             (
                 ChargePointStatus::Finishing,
-                vec![(
-                    ChargePointStatus::Available,
-                    Box::new(unblock_battery_and_clear_tx_profiles),
-                )],
+                vec![
+                    (
+                        ChargePointStatus::Available,
+                        Box::new(unblock_battery_and_clear_tx_profiles),
+                    ),
+                    (ChargePointStatus::SuspendedEVSE, block_battery.clone()),
+                    (ChargePointStatus::Charging, block_battery.clone()),
+                ],
             ),
         ];
 
@@ -1256,6 +1260,94 @@ mod tests {
             }
         );
         assert!(charge_point_state.get_active_charging_profiles().is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn finishing_to_suspended_evse() -> Result<(), Box<dyn std::error::Error>> {
+        let fronius_mock = Arc::new(Mutex::new(FroniusMock::default()));
+        let hook: Arc<Mutex<dyn OcppStatusNotificationHook>> =
+            Arc::new(Mutex::new(OcppHooks::new(
+                Arc::clone(&fronius_mock),
+                Arc::new(Mutex::new(AwattarApiMock::default())),
+                test_config(),
+            )));
+
+        let mut charge_point_state = ChargePointState::default();
+        charge_point_state.set_charge_point_status(ChargePointStatus::Finishing);
+
+        let status_notification_charging = StatusNotificationRequest {
+            connector_id: CONNECTOR_ID as u32,
+            error_code: ChargePointErrorCode::NoError,
+            info: None,
+            status: ChargePointStatus::SuspendedEVSE,
+            timestamp: Some(Utc::now()),
+            vendor_id: None,
+            vendor_error_code: None,
+        };
+
+        hook.lock()
+            .unwrap()
+            .evaluate(&status_notification_charging, &mut charge_point_state)?;
+
+        assert!(
+            fronius_mock
+                .lock()
+                .unwrap()
+                .block_battery_for_duration_called
+        );
+
+        assert!(!fronius_mock.lock().unwrap().unblock_battery_called);
+
+        assert_eq!(
+            charge_point_state.get_charge_point_status(),
+            &Some(ChargePointStatus::SuspendedEVSE)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn finishing_to_charging() -> Result<(), Box<dyn std::error::Error>> {
+        let fronius_mock = Arc::new(Mutex::new(FroniusMock::default()));
+        let hook: Arc<Mutex<dyn OcppStatusNotificationHook>> =
+            Arc::new(Mutex::new(OcppHooks::new(
+                Arc::clone(&fronius_mock),
+                Arc::new(Mutex::new(AwattarApiMock::default())),
+                test_config(),
+            )));
+
+        let mut charge_point_state = ChargePointState::default();
+        charge_point_state.set_charge_point_status(ChargePointStatus::Finishing);
+
+        let status_notification_charging = StatusNotificationRequest {
+            connector_id: CONNECTOR_ID as u32,
+            error_code: ChargePointErrorCode::NoError,
+            info: None,
+            status: ChargePointStatus::Charging,
+            timestamp: Some(Utc::now()),
+            vendor_id: None,
+            vendor_error_code: None,
+        };
+
+        hook.lock()
+            .unwrap()
+            .evaluate(&status_notification_charging, &mut charge_point_state)?;
+
+        assert!(
+            fronius_mock
+                .lock()
+                .unwrap()
+                .block_battery_for_duration_called
+        );
+
+        assert!(!fronius_mock.lock().unwrap().unblock_battery_called);
+
+        assert_eq!(
+            charge_point_state.get_charge_point_status(),
+            &Some(ChargePointStatus::Charging)
+        );
+
         Ok(())
     }
 }

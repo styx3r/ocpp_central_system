@@ -66,7 +66,7 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
             | SmartChargingMode::PVOverProduction => {
                 if let Some(possible_pv_charging_current) = possible_pv_charging_current {
                     if possible_pv_charging_current
-                        > self.config.charging_point.minimum_charging_current
+                        >= self.config.charging_point.minimum_charging_current
                     {
                         let possible_charging_current_decimal = Decimal::from_f64_retain(
                             possible_pv_charging_current.clamp(
@@ -497,10 +497,10 @@ mod tests {
     }
 
     #[test]
-    fn max_power_flow_and_changed_max_charging_current() -> Result<(), Box<dyn std::error::Error>> {
+    fn min_power_flow_and_changed_max_charging_current() -> Result<(), Box<dyn std::error::Error>> {
         // Setting minimum charging current to 1A.
         let mut config = test_config();
-        config.charging_point.minimum_charging_current = 1.0;
+        config.charging_point.minimum_charging_current = 6.0;
 
         // Setting intervals in a way that only ONE element is used as average
         config
@@ -519,7 +519,7 @@ mod tests {
         )));
 
         let mut power_flow_realtime_data = default_powerflow_realtime_data();
-        power_flow_realtime_data.body.data.site.p_pv = Some(14000.0);
+        power_flow_realtime_data.body.data.site.p_pv = Some(4500.0);
         power_flow_realtime_data.body.data.site.p_load = Some(-100.0);
         power_flow_realtime_data.body.data.site.p_akku = Some(-100.0);
 
@@ -627,7 +627,7 @@ mod tests {
                 .charging_schedule_period,
             vec![ChargingSchedulePeriod {
                 start_period: 0,
-                limit: Decimal::from_f64_retain(config.charging_point.default_current)
+                limit: Decimal::from_f64_retain(6.0)
                     .unwrap()
                     .round_dp(1),
                 number_phases: None
