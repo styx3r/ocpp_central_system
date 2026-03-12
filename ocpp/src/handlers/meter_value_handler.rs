@@ -1,9 +1,9 @@
 use crate::ocpp_types::{CustomError, MessageTypeName};
-use crate::{ChargePointState, OcppMeterValuesHook};
+use crate::{ChargePointState, OcppMeterValuesHook, PhaseMeasurand};
 use std::sync::{Arc, Mutex};
 
 use rust_ocpp::v1_6::messages::meter_values;
-use rust_ocpp::v1_6::types::{UnitOfMeasure, Measurand};
+use rust_ocpp::v1_6::types::{Measurand, UnitOfMeasure};
 
 use log::{error, info};
 
@@ -34,23 +34,19 @@ macro_rules! sample_value_from_all_phases {
     ($measurand_type:pat, $sampled_value:expr, $destination:expr) => {
         match $sampled_value.measurand {
             Some($measurand_type) => {
-                match ($destination, $sampled_value.value.parse::<f64>()) {
-                    (None, Ok(v)) => match $sampled_value.unit {
+                match $sampled_value.value.parse::<f64>() {
+                    Ok(v) => match $sampled_value.unit {
                         Some(UnitOfMeasure::Kw) => {
-                            $destination = Some(v * 1000.0);
-                        },
-                        _ => {
-                            $destination = Some(v);
+                            $destination.measurands.push(PhaseMeasurand::<f64> {
+                                value: v * 1000.0,
+                                phase: $sampled_value.phase.clone().unwrap().into(),
+                            });
                         }
-                    }
-                    (Some(destination), Ok(v)) => match $sampled_value.unit {
-                        Some(UnitOfMeasure::Kw) => {
-                            $destination = Some(destination + (v * 1000.0));
-                        },
-                        _ => {
-                            $destination = Some(destination + v);
-                        }
-                    }
+                        _ => $destination.measurands.push(PhaseMeasurand::<f64> {
+                            value: v,
+                            phase: $sampled_value.phase.clone().unwrap().into(),
+                        }),
+                    },
                     _ => {}
                 };
             }
@@ -200,6 +196,8 @@ mod tests {
     use rust_ocpp::v1_6::types::{
         Location, Measurand, MeterValue, Phase, ReadingContext, SampledValue, ValueFormat,
     };
+
+    use crate::MultiPhaseMeasurand;
 
     use super::*;
 
@@ -363,7 +361,25 @@ mod tests {
         assert_eq!(response, meter_values::MeterValuesResponse {});
 
         assert_eq!(charge_point_state.measurand.current_offered, Some(9.0));
-        assert_eq!(charge_point_state.measurand.voltage, Some(695.9));
+        assert_eq!(
+            charge_point_state.measurand.voltage,
+            MultiPhaseMeasurand {
+                measurands: vec![
+                    PhaseMeasurand {
+                        value: 231.7,
+                        phase: crate::Phase::L1
+                    },
+                    PhaseMeasurand {
+                        value: 231.8,
+                        phase: crate::Phase::L2
+                    },
+                    PhaseMeasurand {
+                        value: 232.4,
+                        phase: crate::Phase::L3
+                    }
+                ]
+            }
+        );
         assert_eq!(charge_point_state.measurand.power_offered, Some(6255.9));
 
         assert_eq!(charge_point_state.max_current, None);

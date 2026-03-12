@@ -76,11 +76,12 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         charging_point_state: &mut ChargePointState,
     ) -> Result<f64, CustomError> {
         let max_charging_power: f64 = self.config.charging_point.max_charging_power.into();
+        let latest_voltage_sum = charging_point_state
+            .get_latest_voltage()
+            .get_sum_of_phases(&[ocpp::Phase::L1, ocpp::Phase::L2, ocpp::Phase::L3]);
 
         let max_charging_current = (max_charging_power
-            / (charging_point_state
-                .get_latest_voltage()
-                .unwrap_or(self.config.charging_point.default_system_voltage)
+            / (latest_voltage_sum.unwrap_or(self.config.charging_point.default_system_voltage)
                 * self
                     .latest_cos_phi
                     .unwrap_or(self.config.charging_point.default_cos_phi)))
@@ -307,22 +308,18 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                     power_pv + power_load
                 };
 
-                overproduction += if let Some(power_active_imported) =
-                    charging_point_state.get_latest_power_active_imported()
-                {
-                    power_active_imported
-                } else {
-                    0.0
-                };
+                let power_active_imported = charging_point_state
+                    .get_latest_power_active_imported()
+                    .get_sum_of_phases(&[ocpp::Phase::L1, ocpp::Phase::L2, ocpp::Phase::L3]);
+
+                overproduction += power_active_imported.unwrap_or(0.0);
 
                 info!(
                     "Current PV overproduction {} + {} + {} + {} = {}W",
                     power_pv,
                     power_load,
                     if power_akku < 0.0 { power_akku } else { 0.0 },
-                    charging_point_state
-                        .get_latest_power_active_imported()
-                        .unwrap_or(0.0),
+                    power_active_imported.unwrap_or(0.0),
                     overproduction
                 );
 
@@ -378,7 +375,9 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             );
 
             if let Some(latest_cos_phi) = self.latest_cos_phi
-                && let Some(latest_voltage) = charging_point_state.get_latest_voltage()
+                && let Some(latest_voltage) = charging_point_state
+                    .get_latest_voltage()
+                    .get_sum_of_phases(&[ocpp::Phase::L1, ocpp::Phase::L2, ocpp::Phase::L3])
             {
                 let possible_charging_current =
                     (pv_overproduction_average / (latest_cos_phi * latest_voltage)).floor();
@@ -401,7 +400,9 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
     ) -> Result<(), CustomError> {
         if let Some(current_offered) = charging_point_state.get_latest_current_offered()
             && let Some(power_offered) = charging_point_state.get_latest_power_offered()
-            && let Some(voltage) = charging_point_state.get_latest_voltage()
+            && let Some(voltage) = charging_point_state
+                .get_latest_voltage()
+                .get_sum_of_phases(&[ocpp::Phase::L1, ocpp::Phase::L2, ocpp::Phase::L3])
             && power_offered != 0.0
             && voltage != 0.0
             && current_offered != 0.0

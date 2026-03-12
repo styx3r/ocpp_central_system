@@ -169,7 +169,7 @@ mod tests {
         Data, FroniusMock, PowerFlowRealtimeData, PowerFlowRealtimeDataBody,
         PowerFlowRealtimeDataHeader, Site, Smartloads, Status,
     };
-    use ocpp::{ChargingProfile, OcppMeterValuesHook};
+    use ocpp::{ChargingProfile, MultiPhaseMeasurand, OcppMeterValuesHook, PhaseMeasurand};
     use serde::de::DeserializeOwned;
     use std::{
         collections::HashMap,
@@ -316,9 +316,23 @@ mod tests {
 
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
-        static VOLTAGE: f64 = 695.9;
 
-        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
+        let voltage: MultiPhaseMeasurand<f64> = MultiPhaseMeasurand::<f64>::new(vec![
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L1,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L2,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L3,
+            },
+        ]);
+
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, voltage);
         hook.lock().unwrap().evaluate(&mut charge_point_state)?;
 
         let request_to_send = charge_point_state.get_requests_to_send().first();
@@ -386,9 +400,22 @@ mod tests {
 
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
-        static VOLTAGE: f64 = 695.9;
+        let voltage: MultiPhaseMeasurand<f64> = MultiPhaseMeasurand::<f64>::new(vec![
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L1,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L2,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L3,
+            },
+        ]);
 
-        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, voltage);
         charge_point_state.set_max_current(15.0);
 
         hook.lock().unwrap().evaluate(&mut charge_point_state)?;
@@ -434,9 +461,22 @@ mod tests {
 
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
-        static VOLTAGE: f64 = 695.9;
+        let voltage: MultiPhaseMeasurand<f64> = MultiPhaseMeasurand::<f64>::new(vec![
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L1,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L2,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L3,
+            },
+        ]);
 
-        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, voltage);
         charge_point_state.set_max_current(15.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
 
@@ -545,9 +585,22 @@ mod tests {
 
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
-        static VOLTAGE: f64 = 695.9;
+        let voltage: MultiPhaseMeasurand<f64> = MultiPhaseMeasurand::<f64>::new(vec![
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L1,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L2,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L3,
+            },
+        ]);
 
-        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, voltage);
         charge_point_state.set_max_current(4.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
         charge_point_state.add_charging_profile(&ChargingProfile {
@@ -627,9 +680,7 @@ mod tests {
                 .charging_schedule_period,
             vec![ChargingSchedulePeriod {
                 start_period: 0,
-                limit: Decimal::from_f64_retain(6.0)
-                    .unwrap()
-                    .round_dp(1),
+                limit: Decimal::from_f64_retain(6.0).unwrap().round_dp(1),
                 number_phases: None
             }]
         );
@@ -730,9 +781,22 @@ mod tests {
 
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
-        static VOLTAGE: f64 = 695.9;
+        let voltage: MultiPhaseMeasurand<f64> = MultiPhaseMeasurand::<f64>::new(vec![
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L1,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L2,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L3,
+            },
+        ]);
 
-        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, voltage);
         charge_point_state.set_max_current(4.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProduction);
 
@@ -832,9 +896,22 @@ mod tests {
 
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
-        static VOLTAGE: f64 = 695.9;
+        let voltage: MultiPhaseMeasurand<f64> = MultiPhaseMeasurand::<f64>::new(vec![
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L1,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L2,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L3,
+            },
+        ]);
 
-        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, voltage);
         charge_point_state.set_max_current(15.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
 
@@ -881,9 +958,22 @@ mod tests {
 
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
-        static VOLTAGE: f64 = 695.9;
+        let voltage: MultiPhaseMeasurand<f64> = MultiPhaseMeasurand::<f64>::new(vec![
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L1,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L2,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L3,
+            },
+        ]);
 
-        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, voltage);
         charge_point_state.set_max_current(15.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
         charge_point_state.add_charging_profile(&ChargingProfile {
@@ -972,9 +1062,22 @@ mod tests {
 
         static POWER: f64 = 6255.9;
         static CURRENT: f64 = 9.0;
-        static VOLTAGE: f64 = 695.9;
+        let voltage: MultiPhaseMeasurand<f64> = MultiPhaseMeasurand::<f64>::new(vec![
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L1,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L2,
+            },
+            PhaseMeasurand::<f64> {
+                value: 231.97,
+                phase: ocpp::Phase::L3,
+            },
+        ]);
 
-        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, VOLTAGE);
+        let mut charge_point_state = ChargePointState::new(POWER, CURRENT, voltage);
         charge_point_state.set_max_current(15.0);
         charge_point_state.set_smart_charging_mode(SmartChargingMode::PVOverProductionAndGridBased);
         charge_point_state.add_charging_profile(&ChargingProfile {

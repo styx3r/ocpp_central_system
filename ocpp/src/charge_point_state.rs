@@ -21,12 +21,79 @@ pub struct RequestToSend {
 
 //-------------------------------------------------------------------------------------------------
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Phase {
+    L1,
+    L2,
+    L3,
+    N,
+    L1N,
+    L2N,
+    L3N,
+    L1L2,
+    L2L3,
+    L3L1,
+}
+
+impl From<rust_ocpp::v1_6::types::Phase> for Phase {
+    fn from(value: rust_ocpp::v1_6::types::Phase) -> Self {
+        match value {
+            rust_ocpp::v1_6::types::Phase::L1 => Self::L1,
+            rust_ocpp::v1_6::types::Phase::L2 => Self::L2,
+            rust_ocpp::v1_6::types::Phase::L3 => Self::L3,
+            rust_ocpp::v1_6::types::Phase::N => Self::N,
+            rust_ocpp::v1_6::types::Phase::L1N => Self::L1N,
+            rust_ocpp::v1_6::types::Phase::L2N => Self::L2N,
+            rust_ocpp::v1_6::types::Phase::L3N => Self::L3N,
+            rust_ocpp::v1_6::types::Phase::L1L2 => Self::L1L2,
+            rust_ocpp::v1_6::types::Phase::L2L3 => Self::L2L3,
+            rust_ocpp::v1_6::types::Phase::L3L1 => Self::L3L1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PhaseMeasurand<T> {
+    pub value: T,
+    pub phase: Phase,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct MultiPhaseMeasurand<T> {
+    pub(crate) measurands: Vec<PhaseMeasurand<T>>,
+}
+
+impl<T: std::iter::Sum + Copy> MultiPhaseMeasurand<T> {
+    pub fn get_sum_of_phases(&self, phases: &[Phase]) -> Option<T> {
+        let filtered_phases = self.measurands
+            .iter()
+            .filter(|m| phases.contains(&m.phase))
+            .map(|m| m.value).collect::<Vec<T>>();
+
+        if filtered_phases.is_empty() {
+            return None;
+        }
+
+        Some(filtered_phases.into_iter().sum::<T>())
+    }
+}
+
+impl<T> MultiPhaseMeasurand<T> {
+    pub fn new(measurands: Vec<PhaseMeasurand<T>>) -> Self {
+        Self {
+            measurands
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
 #[derive(Default, Clone)]
 pub struct Measurand {
-    /// Instantaneous current flow from EV in A. Sum of all phases.
-    pub(crate) current_export: Option<f64>,
-    /// Instantaneous current flow to EV in A. Sum of all phases.
-    pub(crate) current_import: Option<f64>,
+    /// Instantaneous current flow from EV in A.
+    pub(crate) current_export: MultiPhaseMeasurand<f64>,
+    /// Instantaneous current flow to EV in A.
+    pub(crate) current_import: MultiPhaseMeasurand<f64>,
     /// Maximum current offered to EV in A.
     pub(crate) current_offered: Option<f64>,
     /// Active electrical energy exported to the grid in Wh.
@@ -47,26 +114,26 @@ pub struct Measurand {
     pub(crate) energy_reactive_import_interval: Option<f64>,
     /// Frequency in Hz.
     pub(crate) frequency: Option<f64>,
-    /// Instantaneous active power exported by EV in W. Sum of all phases.
-    pub(crate) power_active_export: Option<f64>,
-    /// Instantaneous active power imported by EV in W. Sum of all phases.
-    pub(crate) power_active_import: Option<f64>,
+    /// Instantaneous active power exported by EV in W.
+    pub(crate) power_active_export: MultiPhaseMeasurand<f64>,
+    /// Instantaneous active power imported by EV in W.
+    pub(crate) power_active_import: MultiPhaseMeasurand<f64>,
     /// Instantaneous power factor of total energy flow.
     pub(crate) power_factor: Option<f64>,
     /// Maximum power offered to EV in kW.
     pub(crate) power_offered: Option<f64>,
-    /// Instantaneous reactive power exported by EV in Var. Sum of all phases.
-    pub(crate) power_reactive_export: Option<f64>,
-    /// Instantaneous reactive power imported by EV in Var. Sum of all phases.
-    pub(crate) power_reactive_import: Option<f64>,
+    /// Instantaneous reactive power exported by EV in Var.
+    pub(crate) power_reactive_export: MultiPhaseMeasurand<f64>,
+    /// Instantaneous reactive power imported by EV in Var.
+    pub(crate) power_reactive_import: MultiPhaseMeasurand<f64>,
     /// Fan speed in RPM.
     pub(crate) rpm: Option<f64>,
     /// State of charge of charging vehicle in percentage.
     pub(crate) state_of_charge: Option<f64>,
     /// Temperature reading inside ChargePoint.
     pub(crate) temperature: Option<f64>,
-    /// Instantaneous RMS for AC supply voltage in V. Sum of all phases.
-    pub(crate) voltage: Option<f64>,
+    /// Instantaneous RMS for AC supply voltage in V.
+    pub(crate) voltage: MultiPhaseMeasurand<f64>,
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -101,12 +168,12 @@ pub struct ChargePointState {
 }
 
 impl ChargePointState {
-    pub fn new(power: f64, current: f64, voltage: f64) -> Self {
+    pub fn new(power: f64, current: f64, voltage: MultiPhaseMeasurand<f64>) -> Self {
         Self {
             charge_point_status: None,
             measurand: Measurand {
-                current_export: None,
-                current_import: None,
+                current_export: MultiPhaseMeasurand::default(),
+                current_import: MultiPhaseMeasurand::default(),
                 current_offered: Some(current),
                 energy_active_export_register: None,
                 energy_active_import_register: None,
@@ -117,16 +184,16 @@ impl ChargePointState {
                 energy_reactive_export_interval: None,
                 energy_reactive_import_interval: None,
                 frequency: None,
-                power_active_export: None,
-                power_active_import: None,
+                power_active_export: MultiPhaseMeasurand::default(),
+                power_active_import: MultiPhaseMeasurand::default(),
                 power_factor: None,
                 power_offered: Some(power),
-                power_reactive_export: None,
-                power_reactive_import: None,
+                power_reactive_export: MultiPhaseMeasurand::default(),
+                power_reactive_import: MultiPhaseMeasurand::default(),
                 rpm: None,
                 state_of_charge: None,
                 temperature: None,
-                voltage: Some(voltage),
+                voltage,
             },
             max_current: None,
             requests_to_send: vec![],
@@ -149,12 +216,12 @@ impl ChargePointState {
         self.measurand.current_offered
     }
 
-    pub fn get_latest_voltage(&self) -> Option<f64> {
-        self.measurand.voltage
+    pub fn get_latest_voltage(&self) -> MultiPhaseMeasurand<f64> {
+        self.measurand.voltage.clone()
     }
 
-    pub fn get_latest_power_active_imported(&self) -> Option<f64> {
-        self.measurand.power_active_import
+    pub fn get_latest_power_active_imported(&self) -> MultiPhaseMeasurand<f64> {
+        self.measurand.power_active_import.clone()
     }
 
     pub fn get_max_current(&self) -> Option<f64> {
@@ -217,10 +284,10 @@ impl ChargePointState {
 
     pub fn disable_smart_charging(&mut self) {
         // Resetting all import measurands
-        self.measurand.current_import = None;
+        self.measurand.current_import = MultiPhaseMeasurand::default();
         self.measurand.energy_active_import_register = None;
         self.measurand.energy_reactive_import_register = None;
-        self.measurand.power_active_import = None;
+        self.measurand.power_active_import = MultiPhaseMeasurand::default();
 
         self.smart_charging_mode = SmartChargingMode::Instant;
     }
