@@ -1,3 +1,5 @@
+extern crate uom;
+
 mod builders;
 mod charge_point_state;
 mod handlers;
@@ -18,6 +20,17 @@ pub use ocpp_types::MessageTypeName;
 use ocpp_central_system::OCPPCentralSystem;
 
 use std::sync::{Arc, Mutex};
+
+pub use uom::{
+    fmt::DisplayStyle,
+    si::{
+        electric_current::ampere,
+        electric_potential::volt,
+        energy::watt_hour,
+        f64::{ElectricCurrent, ElectricPotential, Energy, Power},
+        power::watt,
+    },
+};
 
 //-------------------------------------------------------------------------------------------------
 
@@ -130,7 +143,10 @@ pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizati
         "OCPP server listening on {} with HeartBeatInterval {}, MaxChargingPower {} and AllowedIdTags {:?}",
         listen_address,
         config.charging_point.heartbeat_interval,
-        config.charging_point.max_charging_power,
+        config
+            .charging_point
+            .max_charging_power
+            .get::<uom::si::power::watt>(),
         config.id_tags
     );
 

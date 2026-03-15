@@ -1,5 +1,5 @@
-use config::config;
 use crate::ocpp_types::CustomError;
+use config::config;
 
 use rust_ocpp::v1_6::messages::boot_notification;
 use rust_ocpp::v1_6::types::RegistrationStatus;
@@ -36,6 +36,7 @@ pub(crate) fn handle_boot_notification_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uom::si::{f64::*, power::watt, electric_potential::volt, electric_current::ampere};
 
     static UNITTEST_CHARGING_POINT_MODEL: &str = "MODEL";
     static UNITTEST_CHARGE_POINT_VENDOR: &str = "VENDOR";
@@ -47,6 +48,19 @@ mod tests {
     static UNITTEST_DEFAULT_CURRENT: f64 = 16.0;
     static UNITTEST_COS_PHI: f64 = 0.86;
     static UNITTEST_MINIMUM_CHARGING_CURRENT: f64 = 6.0;
+
+    fn default_charge_point_config() -> config::ChargePoint {
+        config::ChargePoint {
+            serial_number: UNITTEST_CHARGING_POINT_SERIAL.to_owned(),
+            heartbeat_interval: UNITTEST_HEARTBEAT_INTERVAL,
+            max_charging_power: Power::new::<watt>(UNITTEST_MAX_CHARGING_POWER),
+            default_system_voltage: ElectricPotential::new::<volt>(UNITTEST_SYSTEM_VOLTAGE),
+            default_current: ElectricCurrent::new::<ampere>(UNITTEST_DEFAULT_CURRENT),
+            default_cos_phi: UNITTEST_COS_PHI,
+            minimum_charging_current: ElectricCurrent::new::<ampere>(UNITTEST_MINIMUM_CHARGING_CURRENT),
+            config_parameters: vec![],
+        }
+    }
 
     #[test]
     fn boot_notification_with_empty_serial_number() -> Result<(), CustomError> {
@@ -62,16 +76,7 @@ mod tests {
                 meter_serial_number: None,
                 meter_type: None,
             },
-            &config::ChargePoint {
-                serial_number: UNITTEST_CHARGING_POINT_SERIAL.to_owned(),
-                heartbeat_interval: UNITTEST_HEARTBEAT_INTERVAL,
-                max_charging_power: UNITTEST_MAX_CHARGING_POWER,
-                default_system_voltage: UNITTEST_SYSTEM_VOLTAGE,
-                default_current: UNITTEST_DEFAULT_CURRENT,
-                default_cos_phi: UNITTEST_COS_PHI,
-                minimum_charging_current: UNITTEST_MINIMUM_CHARGING_CURRENT,
-                config_parameters: vec![],
-            },
+            &default_charge_point_config(),
         );
 
         assert!(response.is_err());
@@ -92,16 +97,7 @@ mod tests {
                 meter_serial_number: None,
                 meter_type: None,
             },
-            &config::ChargePoint {
-                serial_number: UNITTEST_CHARGING_POINT_SERIAL.to_owned(),
-                heartbeat_interval: UNITTEST_HEARTBEAT_INTERVAL,
-                max_charging_power: UNITTEST_MAX_CHARGING_POWER,
-                default_system_voltage: UNITTEST_SYSTEM_VOLTAGE,
-                default_current: UNITTEST_DEFAULT_CURRENT,
-                default_cos_phi: UNITTEST_COS_PHI,
-                minimum_charging_current: UNITTEST_MINIMUM_CHARGING_CURRENT,
-                config_parameters: vec![],
-            },
+            &default_charge_point_config(),
         );
 
         assert!(response.is_err());
@@ -122,16 +118,7 @@ mod tests {
                 meter_serial_number: None,
                 meter_type: None,
             },
-            &config::ChargePoint {
-                serial_number: UNITTEST_CHARGING_POINT_SERIAL.to_owned(),
-                heartbeat_interval: UNITTEST_HEARTBEAT_INTERVAL,
-                max_charging_power: UNITTEST_MAX_CHARGING_POWER,
-                default_system_voltage: UNITTEST_SYSTEM_VOLTAGE,
-                default_current: UNITTEST_DEFAULT_CURRENT,
-                default_cos_phi: UNITTEST_COS_PHI,
-                minimum_charging_current: UNITTEST_MINIMUM_CHARGING_CURRENT,
-                config_parameters: vec![],
-            },
+            &default_charge_point_config(),
         )?;
 
         assert_eq!(response.interval, UNITTEST_HEARTBEAT_INTERVAL);

@@ -17,7 +17,7 @@ use std::{
 };
 use tungstenite::{WebSocket, connect, stream::MaybeTlsStream};
 
-use ocpp::Decimal;
+use ocpp::{Decimal, Power};
 use rust_ocpp::v1_6::{
     messages::set_charging_profile::SetChargingProfileRequest,
     types::{
@@ -651,7 +651,7 @@ impl IntegrationTest {
         }
     }
 
-    pub fn set_power_flow_realtime_data(&mut self, p_load: f64, p_akku: f64, p_pv: f64) {
+    pub fn set_power_flow_realtime_data(&mut self, p_load: Power, p_akku: Power, p_pv: Power) {
         self.fronius_mock.lock().unwrap().power_flow_realtime_data = Some(PowerFlowRealtimeData {
             body: PowerFlowRealtimeDataBody {
                 data: Data {

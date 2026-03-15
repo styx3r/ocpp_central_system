@@ -89,10 +89,11 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
                         charge_point_state,
                         max_charging_current.unwrap(),
                     )?;
-                } else if let Some(old_current) = charge_point_state.get_max_current()
-                    && let Some(limit) = Decimal::from_f64_retain(old_current)
-                {
-                    self.build_grid_based_smart_charging_tx_profile(charge_point_state, limit)?;
+                } else if let Some(old_current) = charge_point_state.get_max_current() {
+                    self.build_grid_based_smart_charging_tx_profile(
+                        charge_point_state,
+                        old_current,
+                    )?;
                 }
             }
             SmartChargingMode::PVOverProduction => {
@@ -135,7 +136,10 @@ mod tests {
     use awattar::awattar_mock::AwattarApiMock;
     use config::config;
     use fronius::FroniusMock;
-    use ocpp::OcppAuthorizationHook;
+    use ocpp::{
+        ElectricCurrent, ElectricPotential, Energy, OcppAuthorizationHook, Power, ampere, volt,
+        watt, watt_hour,
+    };
     use serde::de::DeserializeOwned;
     use std::sync::{Arc, Mutex};
 
@@ -168,11 +172,11 @@ mod tests {
             charging_point: config::ChargePoint {
                 serial_number: "".to_owned(),
                 heartbeat_interval: 30,
-                max_charging_power: 11000.0,
-                default_system_voltage: 696.0,
-                default_current: 16.0,
+                max_charging_power: Power::new::<watt>(11000.0),
+                default_system_voltage: ElectricPotential::new::<volt>(696.0),
+                default_current: ElectricCurrent::new::<ampere>(16.0),
                 default_cos_phi: 1.0,
-                minimum_charging_current: 6.0,
+                minimum_charging_current: ElectricCurrent::new::<ampere>(6.0),
                 config_parameters: vec![],
             },
             id_tags: vec![],
@@ -186,7 +190,7 @@ mod tests {
                 base_url: "".to_owned(),
             },
             electric_vehicle: config::Ev {
-                average_watt_hours_needed: 30000,
+                average_watt_hours_needed: Energy::new::<watt_hour>(30000.0),
             },
             photo_voltaic: config::PhotoVoltaic {
                 moving_window_size_in_minutes: 15,
@@ -296,7 +300,7 @@ mod tests {
         });
 
         let mut charge_point_state = ChargePointState::default();
-        charge_point_state.set_max_current(16.0);
+        charge_point_state.set_max_current(ElectricCurrent::new::<ampere>(16.0));
 
         let authorize_request = AuthorizeRequest {
             id_tag: "UNITTEST".to_string(),

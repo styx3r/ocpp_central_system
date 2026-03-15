@@ -186,11 +186,16 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
         )
         .add_charging_schedule_period(
             0,
-            Decimal::from_f64_retain(self.config.charging_point.default_current)
-                .ok_or(CustomError::Common(
-                    "Could not convert to Decimal!".to_owned(),
-                ))?
-                .round_dp(1),
+            Decimal::from_f64_retain(
+                self.config
+                    .charging_point
+                    .default_current
+                    .get::<uom::si::electric_current::ampere>(),
+            )
+            .ok_or(CustomError::Common(
+                "Could not convert to Decimal!".to_owned(),
+            ))?
+            .round_dp(1),
             None,
         )
         .get();

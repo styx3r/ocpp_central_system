@@ -1,6 +1,7 @@
 use serde::Deserialize;
 
 use std::fmt;
+pub use uom::si::f64::*;
 
 #[derive(Deserialize, Clone)]
 pub struct Config {
@@ -25,12 +26,12 @@ pub struct ChargePoint {
     pub serial_number: String,
     pub heartbeat_interval: u32,
 
-    pub max_charging_power: f64,
-    pub default_system_voltage: f64,
-    pub default_current: f64,
+    pub max_charging_power: Power,
+    pub default_system_voltage: ElectricPotential,
+    pub default_current: ElectricCurrent,
     pub default_cos_phi: f64,
 
-    pub minimum_charging_current: f64,
+    pub minimum_charging_current: ElectricCurrent,
 
     pub config_parameters: Vec<ConfigSetting>,
 }
@@ -81,7 +82,7 @@ pub struct Awattar {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Ev {
-    pub average_watt_hours_needed: u64,
+    pub average_watt_hours_needed: Energy,
 }
 
 #[derive(Deserialize, Debug, Clone)]

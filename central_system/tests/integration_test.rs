@@ -7,7 +7,9 @@ use chrono::{Duration, Utc};
 use config::config;
 
 use ::config::config::IdTag;
-use ocpp::Decimal;
+use ocpp::{
+    Decimal, ElectricCurrent, ElectricPotential, Energy, Power, ampere, volt, watt, watt_hour,
+};
 use serde_json::json;
 
 use uuid::Uuid;
@@ -24,11 +26,11 @@ fn default_config(websocket_port: u32, id_tags: Vec<IdTag>) -> config::Config {
         charging_point: config::ChargePoint {
             serial_number: "".to_owned(),
             heartbeat_interval: 60,
-            max_charging_power: 11000.0,
-            default_system_voltage: 696.0,
-            default_current: 16.0,
+            max_charging_power: Power::new::<watt>(11000.0),
+            default_system_voltage: ElectricPotential::new::<volt>(696.0),
+            default_current: ElectricCurrent::new::<ampere>(16.0),
             default_cos_phi: 0.86,
-            minimum_charging_current: 6.0,
+            minimum_charging_current: ElectricCurrent::new::<ampere>(6.0),
             config_parameters: vec![],
         },
         id_tags,
@@ -42,7 +44,7 @@ fn default_config(websocket_port: u32, id_tags: Vec<IdTag>) -> config::Config {
             base_url: "".to_owned(),
         },
         electric_vehicle: config::Ev {
-            average_watt_hours_needed: 0,
+            average_watt_hours_needed: Energy::new::<watt_hour>(0.0),
         },
         photo_voltaic: config::PhotoVoltaic {
             moving_window_size_in_minutes: 15,
@@ -358,7 +360,11 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
 
     // Simulating a load of 400W where 100W are used to charge the battery.
     // PV production is set to 14kW.
-    integration_test.set_power_flow_realtime_data(-300.0, -100.0, 14000.0);
+    integration_test.set_power_flow_realtime_data(
+        Power::new::<watt>(-300.0),
+        Power::new::<watt>(-100.0),
+        Power::new::<watt>(14000.0),
+    );
 
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
     integration_test.send_authorize_request(GRID_BASED_SMART_CHARGING_ID)?;
@@ -386,7 +392,11 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
 
     // Simulating a load of 11400W where 100W are used to charge the battery.
     // PV production is set to 14kW.
-    integration_test.set_power_flow_realtime_data(-11300.0, -100.0, 14000.0);
+    integration_test.set_power_flow_realtime_data(
+        Power::new::<watt>(-11300.0),
+        Power::new::<watt>(-100.0),
+        Power::new::<watt>(14000.0),
+    );
 
     integration_test.send_meter_value_readings(
         (219.0, 219.0, 219.0),
@@ -401,7 +411,11 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
 
     // Simulating a load of 11400W where 100W are used to charge the battery.
     // PV production is set to 1kW which is expected to clear the PV based ChargingProfile.
-    integration_test.set_power_flow_realtime_data(-11300.0, -100.0, 1000.0);
+    integration_test.set_power_flow_realtime_data(
+        Power::new::<watt>(-11300.0),
+        Power::new::<watt>(-100.0),
+        Power::new::<watt>(1000.0),
+    );
     integration_test.send_meter_value_readings(
         (219.0, 219.0, 219.0),
         11.0,
@@ -463,7 +477,11 @@ fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
 
     // Simulating a load of 400W where 100W are used to charge the battery.
     // PV production is set to 14kW.
-    integration_test.set_power_flow_realtime_data(-300.0, -100.0, 1000.0);
+    integration_test.set_power_flow_realtime_data(
+        Power::new::<watt>(-300.0),
+        Power::new::<watt>(-100.0),
+        Power::new::<watt>(1000.0),
+    );
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
     integration_test.send_authorize_request(PV_SMART_CHARGING_ID)?;
 
@@ -480,7 +498,11 @@ fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
 
     // Simulating a load of 11400W where 100W are used to charge the battery.
     // PV production is set to 14kW.
-    integration_test.set_power_flow_realtime_data(-11300.0, -100.0, 14000.0);
+    integration_test.set_power_flow_realtime_data(
+        Power::new::<watt>(-11300.0),
+        Power::new::<watt>(-100.0),
+        Power::new::<watt>(14000.0),
+    );
     integration_test.send_meter_value_readings(
         (219.0, 219.0, 219.0),
         11.0,
@@ -493,7 +515,11 @@ fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
 
     // Simulating a load of 11400W where 100W are used to charge the battery.
     // PV production is set to 1kW which is expected to clear the PV based ChargingProfile.
-    integration_test.set_power_flow_realtime_data(-11300.0, -100.0, 1000.0);
+    integration_test.set_power_flow_realtime_data(
+        Power::new::<watt>(-11300.0),
+        Power::new::<watt>(-100.0),
+        Power::new::<watt>(1000.0),
+    );
     integration_test.send_meter_value_readings(
         (219.0, 219.0, 219.0),
         11.0,
@@ -554,7 +580,11 @@ fn repeated_pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Err
 
     // Simulating a load of 400W where 100W are used to charge the battery.
     // PV production is set to 14kW.
-    integration_test.set_power_flow_realtime_data(-300.0, -100.0, 1000.0);
+    integration_test.set_power_flow_realtime_data(
+        Power::new::<watt>(-300.0),
+        Power::new::<watt>(-100.0),
+        Power::new::<watt>(1000.0),
+    );
     integration_test.send_status_notification(AVAILABLE_STATUS_NOTIFCATION)?;
     integration_test.send_authorize_request(PV_SMART_CHARGING_ID)?;
 
@@ -571,7 +601,11 @@ fn repeated_pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Err
 
     // Simulating a load of 11400W where 100W are used to charge the battery.
     // PV production is set to 14kW.
-    integration_test.set_power_flow_realtime_data(-11300.0, -100.0, 14000.0);
+    integration_test.set_power_flow_realtime_data(
+        Power::new::<watt>(-11300.0),
+        Power::new::<watt>(-100.0),
+        Power::new::<watt>(14000.0),
+    );
     for _ in 0..5 {
         integration_test.send_meter_value_readings(
             (219.0, 219.0, 219.0),
@@ -614,7 +648,11 @@ fn repeated_pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Err
 
     // Simulating a load of 11400W where 100W are used to charge the battery.
     // PV production is set to 14kW.
-    integration_test.set_power_flow_realtime_data(-11300.0, -100.0, 14000.0);
+    integration_test.set_power_flow_realtime_data(
+        Power::new::<watt>(-11300.0),
+        Power::new::<watt>(-100.0),
+        Power::new::<watt>(14000.0),
+    );
     integration_test.send_meter_value_readings(
         (219.0, 219.0, 219.0),
         11.0,

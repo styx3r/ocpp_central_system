@@ -1,6 +1,7 @@
 mod api_types;
 pub mod awattar_mock;
 
+use ::config::time::hour;
 pub(crate) use api_types::MarketData;
 use chrono::{DateTime, Local};
 use config::config;
@@ -62,9 +63,10 @@ impl AwattarApiAdapter {
         market_data: &MarketData,
         config: &config::Config,
     ) -> Option<Period> {
-        let window_size = (config.electric_vehicle.average_watt_hours_needed as f64
+        let window_size = (config.electric_vehicle.average_watt_hours_needed
             / config.charging_point.max_charging_power)
-            .ceil() as usize;
+            .ceil::<hour>()
+            .get::<hour>() as usize;
         let sliding_windows_average = market_data
             .data
             .windows(window_size)
@@ -315,11 +317,11 @@ mod tests {
             charging_point: config::ChargePoint {
                 serial_number: "".to_owned(),
                 heartbeat_interval: 60,
-                max_charging_power: 6000.0,
-                default_system_voltage: 696.0,
-                default_current: 16.0,
+                max_charging_power: config::Power::new::<::config::power::watt>(6000.0),
+                default_system_voltage: config::ElectricPotential::new::<::config::electric_potential::volt>(696.0),
+                default_current: config::ElectricCurrent::new::<::config::electric_current::ampere>(16.0),
                 default_cos_phi: 0.86,
-                minimum_charging_current: 6.0,
+                minimum_charging_current: config::ElectricCurrent::new::<::config::electric_current::ampere>(6.0),
                 config_parameters: vec![],
             },
             id_tags: vec![],
@@ -333,11 +335,11 @@ mod tests {
                 base_url: "".to_owned(),
             },
             electric_vehicle: config::Ev {
-                average_watt_hours_needed: 30000,
+                average_watt_hours_needed: config::Energy::new::<::config::energy::watt_hour>(30000.0),
             },
             photo_voltaic: config::PhotoVoltaic {
-                moving_window_size_in_minutes: 15
-            }
+                moving_window_size_in_minutes: 15,
+            },
         };
 
         let cheapest_period = awattar_api_connector

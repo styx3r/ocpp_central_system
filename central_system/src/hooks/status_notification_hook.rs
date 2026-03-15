@@ -232,6 +232,7 @@ mod tests {
     use config::config;
     use fronius::FroniusMock;
     use ocpp::OcppStatusNotificationHook;
+    use ocpp::{ElectricCurrent, ElectricPotential, Energy, Power, ampere, volt, watt, watt_hour};
     use rust_ocpp::v1_6::{
         messages::{
             clear_charging_profile::ClearChargingProfileRequest,
@@ -259,11 +260,11 @@ mod tests {
             charging_point: config::ChargePoint {
                 serial_number: "".to_owned(),
                 heartbeat_interval: 30,
-                max_charging_power: 11000.0,
-                default_system_voltage: 696.0,
-                default_current: 16.0,
+                max_charging_power: Power::new::<watt>(11000.0),
+                default_system_voltage: ElectricPotential::new::<volt>(696.0),
+                default_current: ElectricCurrent::new::<ampere>(16.0),
                 default_cos_phi: 1.0,
-                minimum_charging_current: 6.0,
+                minimum_charging_current: ElectricCurrent::new::<ampere>(6.0),
                 config_parameters: vec![],
             },
             id_tags: vec![],
@@ -277,7 +278,7 @@ mod tests {
                 base_url: "".to_owned(),
             },
             electric_vehicle: config::Ev {
-                average_watt_hours_needed: 30000,
+                average_watt_hours_needed: Energy::new::<watt_hour>(30000.0),
             },
             photo_voltaic: config::PhotoVoltaic {
                 moving_window_size_in_minutes: 15,

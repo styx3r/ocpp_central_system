@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 
+use uom::si::f64::*;
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ApiVersions {
     #[serde(alias = "ComponentsApi")]
@@ -210,13 +212,13 @@ pub struct Inverter {
     #[serde(alias = "DT")]
     pub dt: u64,
     #[serde(alias = "E_Day")]
-    pub e_day: Option<f64>,
+    pub e_day: Option<Energy>,
     #[serde(alias = "E_Total")]
-    pub e_total: Option<f64>,
+    pub e_total: Option<Energy>,
     #[serde(alias = "E_Year")]
-    pub e_year: Option<f64>,
+    pub e_year: Option<Energy>,
     #[serde(alias = "P")]
-    pub power: Option<f64>,
+    pub power: Option<Power>,
     #[serde(alias = "SOC")]
     pub soc: Option<f64>,
 }
@@ -230,13 +232,13 @@ pub struct Site {
     #[serde(alias = "BackupMode")]
     pub backup_mode: bool,
     #[serde(alias = "P_Grid")]
-    pub p_grid: Option<f64>,
+    pub p_grid: Option<Power>,
     #[serde(alias = "P_Load")]
-    pub p_load: Option<f64>,
+    pub p_load: Option<Power>,
     #[serde(alias = "P_Akku")]
-    pub p_akku: Option<f64>,
+    pub p_akku: Option<Power>,
     #[serde(alias = "P_PV")]
-    pub p_pv: Option<f64>,
+    pub p_pv: Option<Power>,
     #[serde(alias = "rel_SelfConsumption")]
     pub rel_self_consumption: Option<f64>,
     #[serde(alias = "rel_Autonomy")]
@@ -244,17 +246,17 @@ pub struct Site {
     #[serde(alias = "Meter_Location")]
     pub meter_location: String,
     #[serde(alias = "E_Day")]
-    pub e_day: Option<f64>,
+    pub e_day: Option<Energy>,
     #[serde(alias = "E_Year")]
-    pub e_year: Option<f64>,
+    pub e_year: Option<Energy>,
     #[serde(alias = "E_Total")]
-    pub e_total: Option<f64>,
+    pub e_total: Option<Energy>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Ohmpilot {
     #[serde(alias = "P_AC_Total")]
-    pub p_ac_total: f64,
+    pub p_ac_total: Power,
     #[serde(alias = "State")]
     pub state: String,
     #[serde(alias = "Temperature")]
@@ -264,7 +266,7 @@ pub struct Ohmpilot {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct OhmpilotEco {
     #[serde(alias = "P_AC_Total")]
-    pub p_ac_total: f64,
+    pub p_ac_total: Power,
     #[serde(alias = "State_HR1")]
     pub state_hr1: String,
     #[serde(alias = "State_HR2")]
@@ -286,7 +288,7 @@ pub struct Smartloads {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct SecondaryMeters {
     #[serde(alias = "P")]
-    pub power: f64,
+    pub power: Power,
     #[serde(alias = "MLoc")]
     pub meter_location: f64,
     #[serde(alias = "Label")]

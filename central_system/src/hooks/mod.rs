@@ -10,9 +10,9 @@ use fronius::FroniusApi;
 use log::{info, warn};
 use ocpp::{
     ChargePointState, ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType,
-    CustomError, Decimal, MessageBuilder, MessageTypeName,
-    charging_profile_builder::ChargingProfileBuilder,
-    set_charging_profile_builder::SetChargingProfileBuilder,
+    CustomError, Decimal, DisplayStyle, ElectricCurrent, ElectricPotential, MessageBuilder,
+    MessageTypeName, Power, ampere, charging_profile_builder::ChargingProfileBuilder,
+    set_charging_profile_builder::SetChargingProfileBuilder, volt, watt,
 };
 
 use awattar::AwattarApi;
@@ -47,7 +47,7 @@ pub struct OcppHooks<T: FroniusApi, U: AwattarApi> {
     /// Overall config object
     config: config::Config,
     /// Vector of calculated PV overproduction
-    pv_overproduction: Vec<f64>,
+    pv_overproduction: Vec<Power>,
     /// Calculated cos(phi). Will be populated on the first received MeterValuesRequest.
     latest_cos_phi: Option<f64>,
 }
@@ -74,29 +74,32 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
     fn calculate_max_current(
         &self,
         charging_point_state: &mut ChargePointState,
-    ) -> Result<f64, CustomError> {
-        let max_charging_power: f64 = self.config.charging_point.max_charging_power.into();
+    ) -> Result<ElectricCurrent, CustomError> {
         let latest_voltage_sum = charging_point_state
             .get_latest_voltage()
             .get_sum_of_phases(&[ocpp::Phase::L1, ocpp::Phase::L2, ocpp::Phase::L3]);
 
-        let max_charging_current = (max_charging_power
+        let max_charging_current = (self.config.charging_point.max_charging_power
             / (latest_voltage_sum.unwrap_or(self.config.charging_point.default_system_voltage)
                 * self
                     .latest_cos_phi
                     .unwrap_or(self.config.charging_point.default_cos_phi)))
-        .clamp(
-            self.config.charging_point.minimum_charging_current,
-            self.config.charging_point.default_current,
-        )
-        .floor();
+        .floor::<ampere>();
+
+        let clamped = if max_charging_current > self.config.charging_point.default_current {
+            self.config.charging_point.default_current
+        } else if max_charging_current < self.config.charging_point.minimum_charging_current {
+            self.config.charging_point.minimum_charging_current
+        } else {
+            max_charging_current
+        };
 
         info!(
-            "Calculated max. charging current with {} A",
-            max_charging_current
+            "Calculated max. charging current with {}",
+            clamped.into_format_args(ampere, DisplayStyle::Abbreviation)
         );
 
-        Ok(max_charging_current)
+        Ok(clamped)
     }
 
     /// Calculates current possible maximum charging current (A). Returns None if the difference
@@ -104,7 +107,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
     fn get_updated_max_charging_current(
         &mut self,
         charge_point_state: &mut ChargePointState,
-    ) -> Option<Decimal> {
+    ) -> Option<ElectricCurrent> {
         let limit = self.calculate_max_current(charge_point_state).ok();
         if limit.is_none() {
             return None;
@@ -115,19 +118,14 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         // If the current calculated max charging current does not differ more than 1.0 A compared
         // to the cached max charging current nothing will be changed.
         if let Some(cached_max_charging_current) = charge_point_state.get_max_current()
-            && (cached_max_charging_current - limit).abs() < 1.0
+            && (cached_max_charging_current - limit).abs() < ElectricCurrent::new::<ampere>(1.0)
         {
             info!("Max. charging current won't be changed because difference is < 1.0 A");
             return None;
         }
 
         charge_point_state.set_max_current(limit);
-        let charging_profile_max_current = Decimal::from_f64_retain(limit);
-        if charging_profile_max_current.is_none() {
-            return None;
-        }
-
-        charging_profile_max_current
+        Some(limit)
     }
 
     /// Builds the grid based smart charging TX profile. There are two cases possible
@@ -142,7 +140,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
     pub fn build_grid_based_smart_charging_tx_profile(
         &self,
         charge_point_state: &mut ChargePointState,
-        charging_profile_max_current: Decimal,
+        charging_profile_max_current: ElectricCurrent,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let grid_based_charging_profile = if let Some(grid_based_smart_charging_profile) =
             charge_point_state.get_active_charging_profile(TX_GRID_BASED_CHARGING_PROFILE_ID)
@@ -154,7 +152,8 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             grid_based_smart_charging_profile_handle
                 .charging_schedule
                 .charging_schedule_period[1]
-                .limit = charging_profile_max_current;
+                .limit = Decimal::from_f64_retain(charging_profile_max_current.get::<ampere>())
+                .unwrap_or(Decimal::new(0, 0));
 
             grid_based_smart_charging_profile_handle
         } else {
@@ -188,7 +187,8 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             .add_charging_schedule_period(0, Decimal::new(0, 0), None)
             .add_charging_schedule_period(
                 (start_timestamp - now).num_seconds() as i32,
-                charging_profile_max_current,
+                Decimal::from_f64_retain(charging_profile_max_current.get::<ampere>())
+                    .unwrap_or(Decimal::new(0, 0)),
                 None,
             )
             .get();
@@ -219,10 +219,13 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
     fn build_pv_tx_profile(
         &mut self,
         charging_point_state: &mut ChargePointState,
-        charging_profile_max_current: Decimal,
+        charging_profile_max_current: ElectricCurrent,
     ) -> Result<(), CustomError> {
         static CHARGING_SCHEDULE_START_PERIOD: i32 = 0;
         static CHARGING_SCHEDULE_PERIOD_NUMBER_PHASES: Option<i32> = None;
+        let charging_profile_max_current_decimal =
+            Decimal::from_f64_retain(charging_profile_max_current.get::<ampere>())
+                .unwrap_or(Decimal::new(0, 0));
 
         if let Some(existing_pv_charging_profile) =
             charging_point_state.get_active_charging_profile(TX_PV_CHARGING_PROFILE_ID)
@@ -234,7 +237,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                 .unwrap() // NOTE: Unwrap only safe because TX_PV_CHARGING_PROFILE is guaranteed to
                 //       consist of ONE schedule exclusively.
                 .limit
-                - charging_profile_max_current)
+                - charging_profile_max_current_decimal)
                 .abs()
                 <= Decimal::new(1, 0)
             {
@@ -253,7 +256,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         )
         .add_charging_schedule_period(
             CHARGING_SCHEDULE_START_PERIOD,
-            charging_profile_max_current,
+            charging_profile_max_current_decimal,
             CHARGING_SCHEDULE_PERIOD_NUMBER_PHASES,
         )
         .set_stack_level(TX_PV_CHARGING_STACK_LEVEL)
@@ -292,7 +295,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         &mut self,
         charging_point_state: &mut ChargePointState,
         fronius_api: Arc<Mutex<T>>,
-    ) -> Option<f64> {
+    ) -> Option<ElectricCurrent> {
         if let Ok(powerflow_realtime_data) =
             fronius_api.lock().unwrap().get_power_flow_realtime_data()
         {
@@ -302,7 +305,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                 && let Some(power_load) = site_powerflow_realtime_data.p_load
                 && let Some(power_akku) = site_powerflow_realtime_data.p_akku
             {
-                let mut overproduction = if power_akku < 0.0 {
+                let mut overproduction = if power_akku < Power::new::<watt>(0.0) {
                     power_pv + power_load + power_akku
                 } else {
                     power_pv + power_load
@@ -312,15 +315,21 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                     .get_latest_power_active_imported()
                     .get_sum_of_phases(&[ocpp::Phase::L1, ocpp::Phase::L2, ocpp::Phase::L3]);
 
-                overproduction += power_active_imported.unwrap_or(0.0);
+                overproduction += power_active_imported.unwrap_or(Power::new::<watt>(0.0));
 
                 info!(
                     "Current PV overproduction {} + {} + {} + {} = {}W",
-                    power_pv,
-                    power_load,
-                    if power_akku < 0.0 { power_akku } else { 0.0 },
-                    power_active_imported.unwrap_or(0.0),
-                    overproduction
+                    power_pv.into_format_args(watt, DisplayStyle::Abbreviation),
+                    power_load.into_format_args(watt, DisplayStyle::Abbreviation),
+                    if power_akku < Power::new::<watt>(0.0) {
+                        power_akku.get::<watt>()
+                    } else {
+                        0.0
+                    },
+                    power_active_imported
+                        .unwrap_or(Power::new::<watt>(0.0))
+                        .into_format_args(watt, DisplayStyle::Abbreviation),
+                    overproduction.into_format_args(watt, DisplayStyle::Abbreviation)
                 );
 
                 self.pv_overproduction.push(overproduction);
@@ -365,13 +374,22 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                 return None;
             }
 
-            let pv_overproduction_average =
-                self.pv_overproduction.iter().sum::<f64>() / self.pv_overproduction.len() as f64;
+            let pv_overproduction_average = Power::new::<watt>(
+                (self
+                    .pv_overproduction
+                    .clone()
+                    .into_iter()
+                    .sum::<Power>()
+                    / Power::new::<watt>(self.pv_overproduction.len() as f64))
+                .value,
+            );
+
             self.pv_overproduction.remove(0);
 
             info!(
                 "PV overproduction in the last {} minutes: {}",
-                self.config.photo_voltaic.moving_window_size_in_minutes, pv_overproduction_average
+                self.config.photo_voltaic.moving_window_size_in_minutes,
+                pv_overproduction_average.into_format_args(watt, DisplayStyle::Abbreviation)
             );
 
             if let Some(latest_cos_phi) = self.latest_cos_phi
@@ -379,12 +397,13 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                     .get_latest_voltage()
                     .get_sum_of_phases(&[ocpp::Phase::L1, ocpp::Phase::L2, ocpp::Phase::L3])
             {
-                let possible_charging_current =
-                    (pv_overproduction_average / (latest_cos_phi * latest_voltage)).floor();
+                let possible_charging_current = (pv_overproduction_average
+                    / (latest_cos_phi * latest_voltage))
+                    .floor::<ampere>();
 
                 info!(
                     "Resulting in {} A charging current",
-                    possible_charging_current
+                    possible_charging_current.into_format_args(ampere, DisplayStyle::Abbreviation)
                 );
 
                 return Some(possible_charging_current);
@@ -403,17 +422,17 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             && let Some(voltage) = charging_point_state
                 .get_latest_voltage()
                 .get_sum_of_phases(&[ocpp::Phase::L1, ocpp::Phase::L2, ocpp::Phase::L3])
-            && power_offered != 0.0
-            && voltage != 0.0
-            && current_offered != 0.0
+            && power_offered != Power::new::<watt>(0.0)
+            && voltage != ElectricPotential::new::<volt>(0.0)
+            && current_offered != ElectricCurrent::new::<ampere>(0.0)
         {
-            self.latest_cos_phi = Some(power_offered / (voltage * current_offered));
+            self.latest_cos_phi = Some((power_offered / (voltage * current_offered)).into());
 
             info!(
                 "Calculated cos(phi): {} / ({} * {}) = {}",
-                power_offered,
-                voltage,
-                current_offered,
+                power_offered.into_format_args(watt, DisplayStyle::Abbreviation),
+                voltage.into_format_args(volt, DisplayStyle::Abbreviation),
+                current_offered.into_format_args(ampere, DisplayStyle::Abbreviation),
                 self.latest_cos_phi.unwrap_or(1.0)
             );
         }

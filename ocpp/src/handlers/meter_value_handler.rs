@@ -7,19 +7,27 @@ use rust_ocpp::v1_6::types::{Measurand, UnitOfMeasure};
 
 use log::{error, info};
 
+use uom::si::{
+    electric_current::ampere, electric_potential::volt, energy::watt_hour, f64::*,
+    frequency::hertz, power::watt, temperature_interval::degree_celsius,
+};
+
 //-------------------------------------------------------------------------------------------------
 
 macro_rules! sample_value {
-    ($measurand_type:pat, $sampled_value:expr, $destination:expr) => {
+    ($measurand_type:pat, $sampled_value:expr, $destination:expr, $conversion:expr) => {
         match $sampled_value.measurand {
             Some($measurand_type) => {
                 match $sampled_value.value.parse::<f64>() {
                     Ok(v) => match $sampled_value.unit {
-                        Some(UnitOfMeasure::Kw) => {
-                            $destination = Some(v * 1000.0);
+                        Some(UnitOfMeasure::Kvarh)
+                        | Some(UnitOfMeasure::Kw)
+                        | Some(UnitOfMeasure::Kva)
+                        | Some(UnitOfMeasure::Kvar) => {
+                            $destination = Some($conversion(v * 1000.0));
                         }
                         _ => {
-                            $destination = Some(v);
+                            $destination = Some($conversion(v));
                         }
                     },
                     _ => {}
@@ -31,19 +39,22 @@ macro_rules! sample_value {
 }
 
 macro_rules! sample_value_from_all_phases {
-    ($measurand_type:pat, $sampled_value:expr, $destination:expr) => {
+    ($measurand_type:pat, $sampled_value:expr, $destination:expr, $conversion:expr) => {
         match $sampled_value.measurand {
             Some($measurand_type) => {
                 match $sampled_value.value.parse::<f64>() {
                     Ok(v) => match $sampled_value.unit {
-                        Some(UnitOfMeasure::Kw) => {
-                            $destination.measurands.push(PhaseMeasurand::<f64> {
-                                value: v * 1000.0,
+                        Some(UnitOfMeasure::Kvarh)
+                        | Some(UnitOfMeasure::Kw)
+                        | Some(UnitOfMeasure::Kva)
+                        | Some(UnitOfMeasure::Kvar) => {
+                            $destination.measurands.push(PhaseMeasurand {
+                                value: $conversion(v * 1000.0),
                                 phase: $sampled_value.phase.clone().unwrap().into(),
                             });
                         }
-                        _ => $destination.measurands.push(PhaseMeasurand::<f64> {
-                            value: v,
+                        _ => $destination.measurands.push(PhaseMeasurand {
+                            value: $conversion(v),
                             phase: $sampled_value.phase.clone().unwrap().into(),
                         }),
                     },
@@ -53,6 +64,30 @@ macro_rules! sample_value_from_all_phases {
             _ => {}
         }
     };
+}
+
+fn to_ampere(v: f64) -> ElectricCurrent {
+    ElectricCurrent::new::<ampere>(v)
+}
+
+fn to_watt_hour(v: f64) -> Energy {
+    Energy::new::<watt_hour>(v)
+}
+
+fn to_watt(v: f64) -> Power {
+    Power::new::<watt>(v)
+}
+
+fn to_frequency(v: f64) -> Frequency {
+    Frequency::new::<hertz>(v)
+}
+
+fn to_degree_celsius(v: f64) -> TemperatureInterval {
+    TemperatureInterval::new::<degree_celsius>(v)
+}
+
+fn to_volt(v: f64) -> ElectricPotential {
+    ElectricPotential::new::<volt>(v)
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -71,112 +106,134 @@ pub(crate) fn handle_meter_values_request<T: OcppMeterValuesHook>(
             sample_value_from_all_phases!(
                 Measurand::CurrentExport,
                 sampled_value,
-                charge_point_state.measurand.current_export
+                charge_point_state.measurand.current_export,
+                to_ampere
             );
             sample_value_from_all_phases!(
                 Measurand::CurrentImport,
                 sampled_value,
-                charge_point_state.measurand.current_import
+                charge_point_state.measurand.current_import,
+                to_ampere
             );
             sample_value!(
                 Measurand::CurrentOffered,
                 sampled_value,
-                charge_point_state.measurand.current_offered
+                charge_point_state.measurand.current_offered,
+                to_ampere
             );
             sample_value!(
                 Measurand::EnergyActiveExportRegister,
                 sampled_value,
-                charge_point_state.measurand.energy_active_export_register
+                charge_point_state.measurand.energy_active_export_register,
+                to_watt_hour
             );
             sample_value!(
                 Measurand::EnergyActiveImportRegister,
                 sampled_value,
-                charge_point_state.measurand.energy_active_import_register
+                charge_point_state.measurand.energy_active_import_register,
+                to_watt_hour
             );
             sample_value!(
                 Measurand::EnergyReactiveExportRegister,
                 sampled_value,
-                charge_point_state.measurand.energy_reactive_export_register
+                charge_point_state.measurand.energy_reactive_export_register,
+                to_watt_hour
             );
             sample_value!(
                 Measurand::EnergyReactiveImportRegister,
                 sampled_value,
-                charge_point_state.measurand.energy_reactive_import_register
+                charge_point_state.measurand.energy_reactive_import_register,
+                to_watt_hour
             );
             sample_value!(
                 Measurand::EnergyActiveExportInterval,
                 sampled_value,
-                charge_point_state.measurand.energy_active_export_interval
+                charge_point_state.measurand.energy_active_export_interval,
+                to_watt_hour
             );
             sample_value!(
                 Measurand::EnergyActiveImportInterval,
                 sampled_value,
-                charge_point_state.measurand.energy_active_import_interval
+                charge_point_state.measurand.energy_active_import_interval,
+                to_watt_hour
             );
             sample_value!(
                 Measurand::EnergyReactiveExportInterval,
                 sampled_value,
-                charge_point_state.measurand.energy_reactive_export_interval
+                charge_point_state.measurand.energy_reactive_export_interval,
+                to_watt_hour
             );
             sample_value!(
                 Measurand::EnergyReactiveImportInterval,
                 sampled_value,
-                charge_point_state.measurand.energy_reactive_import_interval
+                charge_point_state.measurand.energy_reactive_import_interval,
+                to_watt_hour
             );
             sample_value!(
                 Measurand::Frequency,
                 sampled_value,
-                charge_point_state.measurand.frequency
+                charge_point_state.measurand.frequency,
+                to_frequency
             );
             sample_value_from_all_phases!(
                 Measurand::PowerActiveExport,
                 sampled_value,
-                charge_point_state.measurand.power_active_export
+                charge_point_state.measurand.power_active_export,
+                to_watt
             );
             sample_value_from_all_phases!(
                 Measurand::PowerActiveImport,
                 sampled_value,
-                charge_point_state.measurand.power_active_import
+                charge_point_state.measurand.power_active_import,
+                to_watt
             );
             sample_value!(
                 Measurand::PowerFactor,
                 sampled_value,
-                charge_point_state.measurand.power_factor
+                charge_point_state.measurand.power_factor,
+                |v| { v }
             );
             sample_value!(
                 Measurand::PowerOffered,
                 sampled_value,
-                charge_point_state.measurand.power_offered
+                charge_point_state.measurand.power_offered,
+                to_watt
             );
             sample_value_from_all_phases!(
                 Measurand::PowerReactiveExport,
                 sampled_value,
-                charge_point_state.measurand.power_reactive_export
+                charge_point_state.measurand.power_reactive_export,
+                to_watt
             );
             sample_value_from_all_phases!(
                 Measurand::PowerReactiveImport,
                 sampled_value,
-                charge_point_state.measurand.power_reactive_import
+                charge_point_state.measurand.power_reactive_import,
+                to_watt
             );
             sample_value!(
                 Measurand::Rpm,
                 sampled_value,
-                charge_point_state.measurand.rpm
+                charge_point_state.measurand.rpm,
+                |v| { v }
             );
             sample_value!(
                 Measurand::SoC,
                 sampled_value,
-                charge_point_state.measurand.state_of_charge
+                charge_point_state.measurand.state_of_charge,
+                |v| { v }
             );
             sample_value!(
                 Measurand::Temperature,
                 sampled_value,
-                charge_point_state.measurand.temperature
+                charge_point_state.measurand.temperature,
+                to_degree_celsius
             );
             sample_value_from_all_phases!(
                 Measurand::Voltage,
                 sampled_value,
-                charge_point_state.measurand.voltage
+                charge_point_state.measurand.voltage,
+                to_volt
             );
         }
     }
@@ -360,27 +417,33 @@ mod tests {
 
         assert_eq!(response, meter_values::MeterValuesResponse {});
 
-        assert_eq!(charge_point_state.measurand.current_offered, Some(9.0));
+        assert_eq!(
+            charge_point_state.measurand.current_offered,
+            Some(ElectricCurrent::new::<ampere>(9.0))
+        );
         assert_eq!(
             charge_point_state.measurand.voltage,
             MultiPhaseMeasurand {
                 measurands: vec![
                     PhaseMeasurand {
-                        value: 231.7,
+                        value: ElectricPotential::new::<volt>(231.7),
                         phase: crate::Phase::L1
                     },
                     PhaseMeasurand {
-                        value: 231.8,
+                        value: ElectricPotential::new::<volt>(231.8),
                         phase: crate::Phase::L2
                     },
                     PhaseMeasurand {
-                        value: 232.4,
+                        value: ElectricPotential::new::<volt>(232.4),
                         phase: crate::Phase::L3
                     }
                 ]
             }
         );
-        assert_eq!(charge_point_state.measurand.power_offered, Some(6255.9));
+        assert_eq!(
+            charge_point_state.measurand.power_offered,
+            Some(Power::new::<watt>(6255.9))
+        );
 
         assert_eq!(charge_point_state.max_current, None);
 

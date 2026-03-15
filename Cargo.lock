@@ -331,6 +331,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
+ "uom",
 ]
 
 [[package]]
@@ -592,6 +593,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "uom",
 ]
 
 [[package]]
@@ -1233,6 +1235,7 @@ checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
 dependencies = [
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -1248,6 +1251,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -1279,6 +1283,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -1306,6 +1311,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "tungstenite",
+ "uom",
  "uuid",
 ]
 
@@ -2442,6 +2448,20 @@ name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
+
+[[package]]
+name = "uom"
+version = "0.38.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a739f83872836c82a4f2527d4e54b37007b3de68cafe7edde95fd695968bf4b9"
+dependencies = [
+ "num-bigint",
+ "num-complex",
+ "num-rational",
+ "num-traits",
+ "serde_core",
+ "typenum",
+]
 
 [[package]]
 name = "url"
