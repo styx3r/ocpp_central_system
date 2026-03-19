@@ -17,6 +17,9 @@ pub use crate::charge_point_state::*;
 use config::config::Config;
 pub use ocpp_types::MessageTypeName;
 
+pub use builders::*;
+pub use rust_ocpp::v1_6::types::MessageTrigger;
+
 use ocpp_central_system::OCPPCentralSystem;
 
 use std::sync::{Arc, Mutex};
@@ -113,6 +116,7 @@ where
 pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook>(
     config: &Config,
     ocpp_hooks: Arc<Mutex<T>>,
+    initial_requests: Vec<RequestToSend>,
 ) -> Result<(), Box<dyn Error>> {
     std::fs::create_dir_all(&config.log_directory)?;
 
@@ -146,7 +150,7 @@ pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizati
         config
             .charging_point
             .max_charging_power
-            .get::<uom::si::power::watt>(),
+            .into_format_args(watt, DisplayStyle::Abbreviation),
         config.id_tags
     );
 
@@ -154,7 +158,10 @@ pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizati
         let handle = stream?;
         let peer_address = handle.peer_addr()?.ip().to_string();
 
-        let charge_point_state = Arc::new(Mutex::new(ChargePointState::default()));
+        let charge_point_state = Arc::new(Mutex::new(ChargePointState::with_initial_requests(
+            initial_requests,
+        )));
+
         let mut ocpp_central_system = OCPPCentralSystem::new(
             db_connection,
             peer_address,

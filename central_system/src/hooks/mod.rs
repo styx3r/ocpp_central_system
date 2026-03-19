@@ -375,11 +375,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
             }
 
             let pv_overproduction_average = Power::new::<watt>(
-                (self
-                    .pv_overproduction
-                    .clone()
-                    .into_iter()
-                    .sum::<Power>()
+                (self.pv_overproduction.clone().into_iter().sum::<Power>()
                     / Power::new::<watt>(self.pv_overproduction.len() as f64))
                 .value,
             );

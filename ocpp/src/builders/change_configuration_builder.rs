@@ -6,7 +6,7 @@ use rust_ocpp::v1_6::messages;
 
 //-------------------------------------------------------------------------------------------------
 
-pub(crate) struct ChangeConfigurationBuilder {
+pub struct ChangeConfigurationBuilder {
     key: String,
     value: String,
 
@@ -16,7 +16,7 @@ pub(crate) struct ChangeConfigurationBuilder {
 }
 
 impl ChangeConfigurationBuilder {
-    pub(crate) fn new(key: String, value: String) -> Self {
+    pub fn new(key: String, value: String) -> Self {
         Self {
             key,
             value,

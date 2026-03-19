@@ -1,7 +1,7 @@
 use crate::ocpp_types::{CustomError, MessageTypeName, serialze_ocpp_request};
 
-pub(crate) mod change_configuration_builder;
-pub(crate) mod trigger_message_builder;
+pub mod change_configuration_builder;
+pub mod trigger_message_builder;
 
 pub mod charging_profile_builder;
 pub mod clear_charging_profile_builder;

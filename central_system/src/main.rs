@@ -114,7 +114,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Handle the `error` case.
         Err(e) => {
             // Write `msg` to `stderr`.
-            panic!("Unable to load data from `{}`: {}", args.config_path, e.message());
+            panic!(
+                "Unable to load data from `{}`: {}",
+                args.config_path,
+                e.message()
+            );
         }
     };
 

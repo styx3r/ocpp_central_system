@@ -3,7 +3,7 @@ pub mod awattar_mock;
 
 use ::config::time::hour;
 pub(crate) use api_types::MarketData;
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Datelike, Local, TimeZone};
 use config::config;
 
 use log::info;
@@ -34,11 +34,21 @@ impl AwattarApi for AwattarApiAdapter {
         &self,
         config: &config::Config,
     ) -> Result<Period, Box<dyn std::error::Error>> {
+        let now = Local::now();
+        let mut next_day_six_oclock = Local
+            .with_ymd_and_hms(now.year(), now.month(), now.day(), 6, 0, 0)
+            .unwrap();
+
+        if (next_day_six_oclock + chrono::TimeDelta::days(1)) - now <= chrono::TimeDelta::hours(24) {
+            next_day_six_oclock += chrono::TimeDelta::days(1);
+        }
+
         let response = reqwest::blocking::Client::new()
             .get(format!(
-                "{}?start={}",
+                "{}?start={}&end={}",
                 &config.awattar.base_url,
-                Local::now().timestamp_millis()
+                now.timestamp_millis(),
+                next_day_six_oclock.timestamp_millis()
             ))
             .send()?;
 
@@ -318,10 +328,16 @@ mod tests {
                 serial_number: "".to_owned(),
                 heartbeat_interval: 60,
                 max_charging_power: config::Power::new::<::config::power::watt>(6000.0),
-                default_system_voltage: config::ElectricPotential::new::<::config::electric_potential::volt>(696.0),
-                default_current: config::ElectricCurrent::new::<::config::electric_current::ampere>(16.0),
+                default_system_voltage: config::ElectricPotential::new::<
+                    ::config::electric_potential::volt,
+                >(696.0),
+                default_current: config::ElectricCurrent::new::<::config::electric_current::ampere>(
+                    16.0,
+                ),
                 default_cos_phi: 0.86,
-                minimum_charging_current: config::ElectricCurrent::new::<::config::electric_current::ampere>(6.0),
+                minimum_charging_current: config::ElectricCurrent::new::<
+                    ::config::electric_current::ampere,
+                >(6.0),
                 config_parameters: vec![],
             },
             id_tags: vec![],
@@ -335,7 +351,9 @@ mod tests {
                 base_url: "".to_owned(),
             },
             electric_vehicle: config::Ev {
-                average_watt_hours_needed: config::Energy::new::<::config::energy::watt_hour>(30000.0),
+                average_watt_hours_needed: config::Energy::new::<::config::energy::watt_hour>(
+                    30000.0,
+                ),
             },
             photo_voltaic: config::PhotoVoltaic {
                 moving_window_size_in_minutes: 15,

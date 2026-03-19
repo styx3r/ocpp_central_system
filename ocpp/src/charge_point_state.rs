@@ -216,6 +216,13 @@ impl ChargePointState {
         }
     }
 
+    pub fn with_initial_requests(requests_to_send: Vec<RequestToSend>) -> Self {
+        let mut instance = Self::default();
+        instance.requests_to_send = requests_to_send;
+
+        instance
+    }
+
     pub fn get_charge_point_status(&self) -> &Option<ChargePointStatus> {
         &self.charge_point_status
     }

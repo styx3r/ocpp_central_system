@@ -7,7 +7,7 @@ use rust_ocpp::v1_6::types::MessageTrigger;
 
 //-------------------------------------------------------------------------------------------------
 
-pub(crate) struct TriggerMessageBuilder {
+pub struct TriggerMessageBuilder {
     trigger_message: MessageTrigger,
     connector_id: Option<u32>,
 
@@ -16,7 +16,7 @@ pub(crate) struct TriggerMessageBuilder {
 }
 
 impl TriggerMessageBuilder {
-    pub(crate) fn new(trigger_message: MessageTrigger, connector_id: Option<u32>) -> Self {
+    pub fn new(trigger_message: MessageTrigger, connector_id: Option<u32>) -> Self {
         Self {
             trigger_message,
             connector_id,

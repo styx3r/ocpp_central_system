@@ -6,6 +6,7 @@ use fronius::{
     Data, FroniusMock, PowerFlowRealtimeData, PowerFlowRealtimeDataBody,
     PowerFlowRealtimeDataHeader, Site, Smartloads, Status,
 };
+use ocppcentral_system::setup_initial_configuration;
 use serde::Deserialize;
 use serde_json::json;
 use std::error::Error;
@@ -86,6 +87,8 @@ impl IntegrationTest {
             ocpp::run::<ocppcentral_system::hooks::OcppHooks<FroniusMock, AwattarApiMock>>(
                 &config_clone,
                 Arc::clone(&hooks),
+                setup_initial_configuration(&config_clone)
+                    .expect("Could not setup initial requests"),
             )
             .expect("Could not run OCPPCentralSystem");
         }));

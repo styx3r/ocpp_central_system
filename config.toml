@@ -3,7 +3,7 @@ log_directory = "."
 [fronius]
 username = "USERNAME"
 password = "PASSWORD"
-url = "URL"
+url = "http://10.8.0.1:1234"
 
 [awattar]
 base_url = "https://api.awattar.at/v1/marketdata"
