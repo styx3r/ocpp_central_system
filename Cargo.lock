@@ -1494,7 +1494,6 @@ dependencies = [
  "git-version",
  "log",
  "ocpp",
- "rusqlite",
  "rust-ocpp",
  "serde",
  "serde_json",

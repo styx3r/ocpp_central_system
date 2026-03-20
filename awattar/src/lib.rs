@@ -7,6 +7,7 @@ use chrono::{DateTime, Datelike, Local, TimeZone};
 use config::config;
 
 use log::info;
+use reqwest::StatusCode;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -39,18 +40,22 @@ impl AwattarApi for AwattarApiAdapter {
             .with_ymd_and_hms(now.year(), now.month(), now.day(), 6, 0, 0)
             .unwrap();
 
-        if (next_day_six_oclock + chrono::TimeDelta::days(1)) - now <= chrono::TimeDelta::hours(24) {
+        if (next_day_six_oclock + chrono::TimeDelta::days(1)) - now <= chrono::TimeDelta::hours(24)
+        {
             next_day_six_oclock += chrono::TimeDelta::days(1);
         }
 
-        let response = reqwest::blocking::Client::new()
-            .get(format!(
-                "{}?start={}&end={}",
-                &config.awattar.base_url,
-                now.timestamp_millis(),
-                next_day_six_oclock.timestamp_millis()
-            ))
-            .send()?;
+        let url = format!(
+            "{}?start={}&end={}",
+            &config.awattar.base_url,
+            now.timestamp_millis(),
+            next_day_six_oclock.timestamp_millis()
+        );
+        let response = reqwest::blocking::Client::new().get(url.clone()).send()?;
+
+        if response.status() != StatusCode::OK {
+            return Err(format!("Request returned with status {}: {}", response.status(), url).into());
+        }
 
         let market_data = self.parse_api_response(response.text()?.as_str())?;
 

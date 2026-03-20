@@ -11,8 +11,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use rusqlite::Connection;
-
 use ocpp::{
     ChargingProfileKindType, ChargingProfilePurposeType, ChargingRateUnitType, CustomError,
     Decimal, MessageBuilder, MessageTrigger, MessageTypeName, RequestToSend, ampere,
