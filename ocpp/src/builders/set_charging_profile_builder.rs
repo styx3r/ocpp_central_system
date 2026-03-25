@@ -45,7 +45,9 @@ impl MessageBuilder<messages::set_charging_profile::SetChargingProfileRequest>
             ))
     }
 
-    fn build(mut self) -> impl MessageBuilder<messages::set_charging_profile::SetChargingProfileRequest> {
+    fn build(
+        mut self,
+    ) -> impl MessageBuilder<messages::set_charging_profile::SetChargingProfileRequest> {
         self.set_charging_profile_request =
             Some(messages::set_charging_profile::SetChargingProfileRequest {
                 connector_id: self.connector_id,

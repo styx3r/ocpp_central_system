@@ -66,7 +66,9 @@ impl MessageBuilder<messages::clear_charging_profile::ClearChargingProfileReques
             ))
     }
 
-    fn build(mut self) -> impl MessageBuilder<messages::clear_charging_profile::ClearChargingProfileRequest> {
+    fn build(
+        mut self,
+    ) -> impl MessageBuilder<messages::clear_charging_profile::ClearChargingProfileRequest> {
         self.clear_charging_profile_request = Some(
             messages::clear_charging_profile::ClearChargingProfileRequest {
                 id: self.id,

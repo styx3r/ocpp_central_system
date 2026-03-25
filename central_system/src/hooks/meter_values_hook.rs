@@ -1,4 +1,4 @@
-use crate::OcppHooks;
+use crate::{OcppHooks, hooks::persistence::Persistence};
 use awattar::AwattarApi;
 use config::config::SmartChargingMode;
 use fronius::FroniusApi;
@@ -37,6 +37,11 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
         &mut self,
         charging_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        Persistence::store_meter_readings(
+            &self.db_connection.lock().unwrap(),
+            charging_point_state.get_measurand(),
+        )?;
+
         self.calculate_cos_phi(charging_point_state)?;
 
         let possible_pv_charging_current = self.calculate_possible_pv_charging_current(
@@ -179,6 +184,7 @@ mod tests {
     };
 
     use super::*;
+    use rusqlite::Connection;
     use rust_ocpp::v1_6::{
         messages::{
             clear_charging_profile::ClearChargingProfileRequest,
@@ -287,6 +293,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             test_config(),
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         hook.lock()
@@ -309,6 +316,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             config.clone(),
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         hook.lock()
@@ -405,6 +413,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             test_config(),
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         static POWER: f64 = 6255.9;
@@ -459,6 +468,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             config.clone(),
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         let mut power_flow_realtime_data = default_powerflow_realtime_data();
@@ -577,6 +587,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             config.clone(),
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         let mut power_flow_realtime_data = default_powerflow_realtime_data();
@@ -791,6 +802,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             config.clone(),
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         let mut power_flow_realtime_data = default_powerflow_realtime_data();
@@ -913,6 +925,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             config.clone(),
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         let mut power_flow_realtime_data = default_powerflow_realtime_data();
@@ -980,6 +993,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             config.clone(),
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         let mut power_flow_realtime_data = default_powerflow_realtime_data();
@@ -1089,6 +1103,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             config.clone(),
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         let mut power_flow_realtime_data = default_powerflow_realtime_data();

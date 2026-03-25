@@ -2,13 +2,18 @@ use std::error::Error;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::process::exit;
+use std::sync::{Arc, Mutex};
 
 use config::config::Config;
 
 use ftail::Ftail;
-use log::LevelFilter;
+use log::{LevelFilter, error};
 
 use clap::Parser;
+// use rusqlite::{Connection, Result};
+
+use rusqlite::Connection;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -143,5 +148,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .retention_days(14)
         .init()?; // initialize logger
 
-    ocppcentral_system::run(&config)
+    let db_connection =
+        match Connection::open(format!("{}/central_system.sqlite", &config.log_directory)) {
+            Ok(c) => c,
+            Err(e) => {
+                error!(
+                    "Could not open DB connection with reason: \"{}\"",
+                    e.to_string()
+                );
+                exit(1);
+            }
+        };
+
+    ocppcentral_system::run(&config, Arc::new(Mutex::new(db_connection)))
 }

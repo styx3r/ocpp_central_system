@@ -1,11 +1,13 @@
 mod authorize_hook;
 mod meter_values_hook;
+mod persistence;
 mod status_notification_hook;
 
 use ::config::config::SmartChargingMode;
 use chrono::{DateTime, Duration, Utc};
 use config::config;
 use fronius::FroniusApi;
+use rusqlite::Connection;
 
 use log::{info, warn};
 use ocpp::{
@@ -18,6 +20,8 @@ use ocpp::{
 use awattar::AwattarApi;
 
 use std::sync::{Arc, Mutex};
+
+use persistence::Persistence;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -50,6 +54,8 @@ pub struct OcppHooks<T: FroniusApi, U: AwattarApi> {
     pv_overproduction: Vec<Power>,
     /// Calculated cos(phi). Will be populated on the first received MeterValuesRequest.
     latest_cos_phi: Option<f64>,
+    /// DB connection used for persistance
+    db_connection: Arc<Mutex<Connection>>,
 }
 
 impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
@@ -58,13 +64,17 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
         fronius_api: Arc<Mutex<T>>,
         awattar_api: Arc<Mutex<U>>,
         config: config::Config,
+        db_connection: Arc<Mutex<Connection>>,
     ) -> Self {
+        Persistence::setup(&db_connection.lock().unwrap()).expect("Could not setup persistence!");
+
         Self {
             fronius_api,
             awattar_api,
             config,
             pv_overproduction: vec![],
             latest_cos_phi: None,
+            db_connection,
         }
     }
 

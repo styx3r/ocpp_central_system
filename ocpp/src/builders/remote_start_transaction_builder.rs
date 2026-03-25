@@ -28,7 +28,10 @@ impl RemoteStartTransactionBuilder {
         }
     }
 
-    pub fn set_charging_profile(mut self, charging_profile: ChargingProfile) -> RemoteStartTransactionBuilder {
+    pub fn set_charging_profile(
+        mut self,
+        charging_profile: ChargingProfile,
+    ) -> RemoteStartTransactionBuilder {
         self.charging_profile = Some(charging_profile);
         self
     }
@@ -54,7 +57,10 @@ impl MessageBuilder<messages::remote_start_transaction::RemoteStartTransactionRe
             ))
     }
 
-    fn build(mut self) -> impl MessageBuilder<messages::remote_start_transaction::RemoteStartTransactionRequest> {
+    fn build(
+        mut self,
+    ) -> impl MessageBuilder<messages::remote_start_transaction::RemoteStartTransactionRequest>
+    {
         self.remote_start_transaction_request = Some(
             messages::remote_start_transaction::RemoteStartTransactionRequest {
                 connector_id: Some(self.connector_id),

@@ -253,7 +253,6 @@ mod tests {
 
     #[test]
     fn populate_digest_auth_fields() -> Result<(), Box<dyn std::error::Error>> {
-
         let mut digest_auth = DigestAuth::new(&"USERNAME".into(), &"PASSWORD".into());
         digest_auth.algorithm = Some("SHA256".into());
         digest_auth.qop = Some("auth".into());
@@ -265,7 +264,10 @@ mod tests {
 
         assert_eq!(digest_auth.nc, 2);
         assert!(digest_auth.cnonce.is_some());
-        assert_eq!(digest_auth.response, Some("a6d5b312a6c94010381723eaca2bfe982ab4f0f4109854c3ceaeb42cbd366720".into()));
+        assert_eq!(
+            digest_auth.response,
+            Some("a6d5b312a6c94010381723eaca2bfe982ab4f0f4109854c3ceaeb42cbd366720".into())
+        );
 
         Ok(())
     }

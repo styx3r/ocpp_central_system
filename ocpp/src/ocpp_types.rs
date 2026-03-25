@@ -13,7 +13,6 @@ use log::debug;
 pub enum CustomError {
     Serde(serde_json::Error),
     Common(String),
-    Sql(rusqlite::Error),
 }
 
 impl From<serde_json::Error> for CustomError {
@@ -22,18 +21,11 @@ impl From<serde_json::Error> for CustomError {
     }
 }
 
-impl From<rusqlite::Error> for CustomError {
-    fn from(error: rusqlite::Error) -> Self {
-        Self::Sql(error)
-    }
-}
-
 impl Display for CustomError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Serde(e) => Display::fmt(e, f),
             Self::Common(e) => Display::fmt(e, f),
-            Self::Sql(e) => Display::fmt(e, f),
         }
     }
 }

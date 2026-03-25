@@ -44,7 +44,10 @@ impl ChargingProfileBuilder {
         self
     }
 
-    pub fn set_recurrency_kind(mut self, recurrency_kind: RecurrencyKindType) -> ChargingProfileBuilder {
+    pub fn set_recurrency_kind(
+        mut self,
+        recurrency_kind: RecurrencyKindType,
+    ) -> ChargingProfileBuilder {
         self.charging_profile.recurrency_kind = Some(recurrency_kind);
         self
     }
@@ -64,12 +67,18 @@ impl ChargingProfileBuilder {
         self
     }
 
-    pub fn set_start_schedule_timestamp(mut self, start_timestamp: DateTime<Utc>) -> ChargingProfileBuilder {
+    pub fn set_start_schedule_timestamp(
+        mut self,
+        start_timestamp: DateTime<Utc>,
+    ) -> ChargingProfileBuilder {
         self.charging_profile.charging_schedule.start_schedule = Some(start_timestamp);
         self
     }
 
-    pub fn set_schedule_min_charging_rate(mut self, min_charging_rate: Decimal) -> ChargingProfileBuilder {
+    pub fn set_schedule_min_charging_rate(
+        mut self,
+        min_charging_rate: Decimal,
+    ) -> ChargingProfileBuilder {
         self.charging_profile.charging_schedule.min_charging_rate = Some(min_charging_rate);
         self
     }

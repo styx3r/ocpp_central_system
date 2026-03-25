@@ -27,6 +27,8 @@ use rust_ocpp::v1_6::{
     },
 };
 
+use rusqlite::Connection;
+
 //-------------------------------------------------------------------------------------------------
 
 #[derive(Deserialize, Debug)]
@@ -52,6 +54,7 @@ pub struct IntegrationTest {
     fronius_mock: Arc<Mutex<FroniusMock>>,
     awattar_mock: Arc<Mutex<AwattarApiMock>>,
     websocket: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
+    connection: Arc<Mutex<Connection>>,
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -65,6 +68,9 @@ impl IntegrationTest {
             fronius_mock: Arc::new(Mutex::new(FroniusMock::default())),
             awattar_mock: Arc::new(Mutex::new(AwattarApiMock::default())),
             websocket: None,
+            connection: Arc::new(Mutex::new(
+                Connection::open_in_memory().expect("Could not create in-memory SQlite DB!"),
+            )),
         }
     }
 
@@ -76,12 +82,14 @@ impl IntegrationTest {
 
         let fronius_mock_handle = Arc::clone(&self.fronius_mock);
         let awattar_mock_handle = Arc::clone(&self.awattar_mock);
+        let db_connection_handle = Arc::clone(&self.connection);
 
         self.join_handles.push(spawn(move || {
             let hooks = Arc::new(Mutex::new(ocppcentral_system::hooks::OcppHooks::new(
                 fronius_mock_handle,
                 awattar_mock_handle,
                 config_clone.clone(),
+                db_connection_handle,
             )));
 
             ocpp::run::<ocppcentral_system::hooks::OcppHooks<FroniusMock, AwattarApiMock>>(
@@ -112,6 +120,48 @@ impl IntegrationTest {
         }
 
         panic!("Could not connect!");
+    }
+
+    pub fn get_stored_meter_readings(
+        &self,
+    ) -> Result<Vec<(String, f64, String, String)>, Box<dyn std::error::Error>> {
+        let handle = self.connection.lock().unwrap();
+        let mut stmt = handle.prepare("SELECT * FROM meter_readings")?;
+        let meter_readings_iter = stmt.query_map([], |row| {
+            Ok((
+                row.get::<usize, String>(1)?,
+                row.get::<usize, f64>(3)?,
+                row.get::<usize, String>(4)?,
+                row.get::<usize, String>(5)?,
+            ))
+        })?;
+
+        Ok(meter_readings_iter
+            .map(|e| e.expect("Mismatched type"))
+            .collect::<Vec<_>>())
+    }
+
+    pub fn get_stored_status_notifications(
+        &self,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let handle = self.connection.lock().unwrap();
+        let mut stmt = handle.prepare("SELECT status FROM status_notifications")?;
+        let status_notifiactions_iter =
+            stmt.query_map([], |row| Ok(row.get::<usize, String>(0)?))?;
+
+        Ok(status_notifiactions_iter
+            .map(|e| e.expect("Mismatched type"))
+            .collect::<Vec<_>>())
+    }
+
+    pub fn get_stored_authorize_requests(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let handle = self.connection.lock().unwrap();
+        let mut stmt = handle.prepare("SELECT id_tag FROM authorize_requests")?;
+        let authorize_requests_iter = stmt.query_map([], |row| Ok(row.get::<usize, String>(0)?))?;
+
+        Ok(authorize_requests_iter
+            .map(|e| e.expect("Mismatched type"))
+            .collect::<Vec<_>>())
     }
 
     pub fn teardown(self, log_directory: &str) {

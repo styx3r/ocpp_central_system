@@ -14,8 +14,8 @@ use reqwest::{
 
 use std::time::Duration;
 
-pub use fronius_mock::FroniusMock;
 pub use api_types::*;
+pub use fronius_mock::FroniusMock;
 
 //-------------------------------------------------------------------------------------------------
 

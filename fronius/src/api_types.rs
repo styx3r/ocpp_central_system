@@ -1,6 +1,6 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 use uom::si::f64::*;
 
@@ -190,7 +190,7 @@ pub struct Status {
     #[serde(alias = "Reason")]
     pub reason: String,
     #[serde(alias = "UserMessage")]
-    pub user_message: String
+    pub user_message: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -200,7 +200,7 @@ pub struct PowerFlowRealtimeDataHeader {
     #[serde(alias = "Status")]
     pub status: Status,
     #[serde(alias = "Timestamp")]
-    pub timestamp: DateTime<Utc>
+    pub timestamp: DateTime<Utc>,
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -308,7 +308,7 @@ pub struct Data {
     #[serde(alias = "SecondaryMeters")]
     pub secondart_meters: std::collections::HashMap<String, SecondaryMeters>,
     #[serde(alias = "Version")]
-    pub version: String
+    pub version: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]

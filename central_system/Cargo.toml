@@ -13,6 +13,7 @@ chrono = "0.4.42"
 clap = { version = "4.5.39", features = ["derive"] }
 ftail = "0.3.1"
 toml = "0.9.11"
+rusqlite = { version = "0.38.0", features = ["bundled"] }
 
 config = { path = "../config/" }
 ocpp = { path = "../ocpp/" }
@@ -21,6 +22,7 @@ awattar = { path = "../awattar/" }
 uuid = "1.20.0"
 env_logger = "0.11.8"
 tungstenite = "0.28.0"
+serde_json = "1.0.148"
 
 [build-dependencies]
 git-version = "0.3.9"

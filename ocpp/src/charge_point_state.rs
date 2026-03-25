@@ -1,6 +1,8 @@
 use crate::MessageTypeName;
 use config::config::SmartChargingMode;
 use rust_ocpp::v1_6::types::{ChargePointStatus, ChargingProfile};
+use serde::{Deserialize, Serialize};
+use std::fmt;
 
 use uom::si::f64::*;
 
@@ -23,7 +25,7 @@ pub struct RequestToSend {
 
 //-------------------------------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Phase {
     L1,
     L2,
@@ -35,6 +37,23 @@ pub enum Phase {
     L1L2,
     L2L3,
     L3L1,
+}
+
+impl fmt::Display for Phase {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Phase::L1 => write!(f, "L1"),
+            Phase::L2 => write!(f, "L2"),
+            Phase::L3 => write!(f, "L3"),
+            Phase::N => write!(f, "N"),
+            Phase::L1N => write!(f, "L1N"),
+            Phase::L2N => write!(f, "L2N"),
+            Phase::L3N => write!(f, "L3N"),
+            Phase::L1L2 => write!(f, "L1L2"),
+            Phase::L2L3 => write!(f, "L2L3"),
+            Phase::L3L1 => write!(f, "L3L1"),
+        }
+    }
 }
 
 impl From<rust_ocpp::v1_6::types::Phase> for Phase {
@@ -86,6 +105,13 @@ impl<T: std::iter::Sum + Copy> MultiPhaseMeasurand<T> {
 
         Some(filtered_phases.into_iter().sum::<T>())
     }
+
+    pub fn get_phase(&self, phase: Phase) -> Option<PhaseMeasurand<T>> {
+        self.measurands
+            .iter()
+            .find(|m| m.phase == phase)
+            .map(|m| m.to_owned())
+    }
 }
 
 impl<T> MultiPhaseMeasurand<T> {
@@ -99,49 +125,49 @@ impl<T> MultiPhaseMeasurand<T> {
 #[derive(Default, Clone)]
 pub struct Measurand {
     /// Instantaneous current flow from EV in A.
-    pub(crate) current_export: MultiPhaseMeasurand<ElectricCurrent>,
+    pub current_export: MultiPhaseMeasurand<ElectricCurrent>,
     /// Instantaneous current flow to EV in A.
-    pub(crate) current_import: MultiPhaseMeasurand<ElectricCurrent>,
+    pub current_import: MultiPhaseMeasurand<ElectricCurrent>,
     /// Maximum current offered to EV in A.
-    pub(crate) current_offered: Option<ElectricCurrent>,
+    pub current_offered: Option<ElectricCurrent>,
     /// Active electrical energy exported to the grid in Wh.
-    pub(crate) energy_active_export_register: Option<Energy>,
+    pub energy_active_export_register: Option<Energy>,
     /// Active electrical energy imported from the grid supply in Wh.
-    pub(crate) energy_active_import_register: Option<Energy>,
+    pub energy_active_import_register: Option<Energy>,
     /// Reactive electrical energy exported to the grid in Varh.
-    pub(crate) energy_reactive_export_register: Option<Energy>,
+    pub energy_reactive_export_register: Option<Energy>,
     /// Reactive electrical energy imported from the grid supply in Varh.
-    pub(crate) energy_reactive_import_register: Option<Energy>,
+    pub energy_reactive_import_register: Option<Energy>,
     /// Absolute amount of electrical energy Wh exported to the grid within a given interval.
-    pub(crate) energy_active_export_interval: Option<Energy>,
+    pub energy_active_export_interval: Option<Energy>,
     /// Absolute amount of electrical energy Wh imported from the grid within a given interval.
-    pub(crate) energy_active_import_interval: Option<Energy>,
+    pub energy_active_import_interval: Option<Energy>,
     /// Absolute amount of reactive electrical energy Varh exported to the grid within a given interval.
-    pub(crate) energy_reactive_export_interval: Option<Energy>,
+    pub energy_reactive_export_interval: Option<Energy>,
     /// Absolute amount of reactive electrical energy Varh imported from the grid within a given interval.
-    pub(crate) energy_reactive_import_interval: Option<Energy>,
+    pub energy_reactive_import_interval: Option<Energy>,
     /// Frequency in Hz.
-    pub(crate) frequency: Option<Frequency>,
+    pub frequency: Option<Frequency>,
     /// Instantaneous active power exported by EV in W.
-    pub(crate) power_active_export: MultiPhaseMeasurand<Power>,
+    pub power_active_export: MultiPhaseMeasurand<Power>,
     /// Instantaneous active power imported by EV in W.
-    pub(crate) power_active_import: MultiPhaseMeasurand<Power>,
+    pub power_active_import: MultiPhaseMeasurand<Power>,
     /// Instantaneous power factor of total energy flow.
-    pub(crate) power_factor: Option<f64>,
+    pub power_factor: Option<f64>,
     /// Maximum power offered to EV in W.
-    pub(crate) power_offered: Option<Power>,
+    pub power_offered: Option<Power>,
     /// Instantaneous reactive power exported by EV in Var = Wr.
-    pub(crate) power_reactive_export: MultiPhaseMeasurand<Power>,
+    pub power_reactive_export: MultiPhaseMeasurand<Power>,
     /// Instantaneous reactive power imported by EV in Var = Wr.
-    pub(crate) power_reactive_import: MultiPhaseMeasurand<Power>,
+    pub power_reactive_import: MultiPhaseMeasurand<Power>,
     /// Fan speed in RPM.
-    pub(crate) rpm: Option<f64>,
+    pub rpm: Option<f64>,
     /// State of charge of charging vehicle in percentage.
-    pub(crate) state_of_charge: Option<f64>,
+    pub state_of_charge: Option<f64>,
     /// Temperature reading inside ChargePoint.
-    pub(crate) temperature: Option<TemperatureInterval>,
+    pub temperature: Option<TemperatureInterval>,
     /// Instantaneous RMS for AC supply voltage in V.
-    pub(crate) voltage: MultiPhaseMeasurand<ElectricPotential>,
+    pub voltage: MultiPhaseMeasurand<ElectricPotential>,
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -270,6 +296,10 @@ impl ChargePointState {
         self.active_charging_profiles
             .iter()
             .find(|&charging_profile| charging_profile.charging_profile_id == charging_profile_id)
+    }
+
+    pub fn get_measurand(&self) -> &Measurand {
+        &self.measurand
     }
 
     pub fn add_running_transaction_id(&mut self, transaction: Transaction) {

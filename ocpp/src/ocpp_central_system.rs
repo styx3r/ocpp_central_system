@@ -43,7 +43,6 @@ use crate::{
 use config::config::Config;
 use log::{info, trace};
 
-use rusqlite::Connection;
 use tungstenite::Utf8Bytes;
 
 use std::sync::{Arc, Mutex};
@@ -53,13 +52,8 @@ use std::sync::{Arc, Mutex};
 pub struct OCPPCentralSystem<
     T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook,
 > {
-    db_connection: Connection,
-    charging_point_ip: String,
     config: Config,
     charge_point_state: Arc<Mutex<ChargePointState>>,
-
-    charging_point_count: u32,
-
     ocpp_hooks: Arc<Mutex<T>>,
 }
 
@@ -67,50 +61,17 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
     OCPPCentralSystem<T>
 {
     pub fn new(
-        db_connection: Connection,
-        charging_point_ip: String,
         config: Config,
         charge_point_state: Arc<Mutex<ChargePointState>>,
         status_notification_hook: Arc<Mutex<T>>,
     ) -> Self {
         let instance = Self {
-            db_connection,
-            charging_point_ip,
             config,
             charge_point_state,
-            charging_point_count: 0,
             ocpp_hooks: status_notification_hook,
         };
 
         instance
-            .setup_persistence()
-            .expect("Could not create persistence DB!");
-
-        instance
-    }
-
-    fn setup_persistence(&self) -> Result<(), CustomError> {
-        self.db_connection.execute(
-            "CREATE TABLE IF NOT EXISTS charging_points (id INT PRIMARY KEY, charging_point_ip TEXT, charge_box_serial_number TEXT, charge_point_model TEXT, charge_point_serial_number TEXT, charge_point_vendor TEXT, firmware_version TEXT, iccid TEXT, imsi TEXT, meter_serial_number TEXT, meter_type TEXT, UNIQUE(charging_point_ip, charge_point_serial_number));",
-            ()
-        )?;
-
-        self.db_connection.execute(
-            "CREATE TABLE IF NOT EXISTS security_event_notifications (id INT PRIMARY KEY, kind TEXT, timestamp TEXT, tech_info TEXT);",
-            ()
-        )?;
-
-        self.db_connection.execute(
-            "CREATE TABLE IF NOT EXISTS log_status (id INT PRIMARY KEY, status TEXT, request_id REAL);",
-            ()
-        )?;
-
-        self.db_connection.execute(
-            "CREATE TABLE IF NOT EXISTS signed_firmware_status_notification (id INT PRIMARY KEY, status TEXT);",
-            ()
-        )?;
-
-        Ok(())
     }
 
     pub fn get_boot_message_request(&mut self) -> Result<RequestToSend, CustomError> {
@@ -141,18 +102,7 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
                     request.message_type, request.uuid
                 );
 
-                self.charging_point_count = self.db_connection.query_row(
-                    format!(
-                        "SELECT COUNT(*) FROM charging_points WHERE charging_point_ip = '{}';",
-                        self.charging_point_ip
-                    )
-                    .as_str(),
-                    [],
-                    |r| r.get(0),
-                )?;
-
                 let response = self.visit_request_message(request);
-
                 response
             }
             OcppMessage::Response(response) => self.visit_response_message(response),
@@ -221,20 +171,6 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
                 let boot_notification_request = serde_json::from_value::<
                     boot_notification::BootNotificationRequest,
                 >(request.json)?;
-
-                let _ = self.db_connection.execute(
-                    "INSERT OR IGNORE INTO charging_points (charging_point_ip, charge_box_serial_number, charge_point_model, charge_point_serial_number, charge_point_vendor, firmware_version, iccid, imsi, meter_serial_number, meter_type) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10);",
-                    (&self.charging_point_ip,
-                     &boot_notification_request.charge_point_serial_number.clone().unwrap_or("".to_string()),
-                     &boot_notification_request.charge_point_model,
-                     &boot_notification_request.charge_point_serial_number.clone().unwrap_or("".to_string()),
-                     &boot_notification_request.charge_point_vendor,
-                     &boot_notification_request.firmware_version.clone().unwrap_or("".to_string()),
-                     &boot_notification_request.iccid.clone().unwrap_or("".to_string()),
-                     &boot_notification_request.imsi.clone().unwrap_or("".to_string()),
-                     &boot_notification_request.meter_serial_number.clone().unwrap_or("".to_string()),
-                     &boot_notification_request.meter_type.clone().unwrap_or("".to_string()))
-                );
 
                 serde_json::to_value(&handle_boot_notification_request(
                     &boot_notification_request,
@@ -315,18 +251,6 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
                     log_status_notification::LogStatusNotificationRequest,
                 >(request.json)?;
 
-                let _ = self.db_connection.execute(
-                    "INSERT INTO log_status (status, request_id) VALUES(?1, ?2);",
-                    (
-                        serde_json::to_string(&log_status_notification_request.status)
-                            .unwrap_or("".to_string()),
-                        &log_status_notification_request
-                            .request_id
-                            .clone()
-                            .unwrap_or(-1),
-                    ),
-                );
-
                 serde_json::to_value(&handle_log_status_notification_request(
                     &log_status_notification_request,
                 )?)?
@@ -336,18 +260,6 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
                     security_event_notification::SecurityEventNotificationRequest,
                 >(request.json)?;
 
-                let _ = self.db_connection.execute(
-                    "INSERT INTO security_event_notifications (kind, timestamp, tech_info) VALUES(?1, ?2, ?3);",
-                    (
-                        &security_event_notification_request.kind,
-                        &security_event_notification_request.timestamp.to_string(),
-                        &security_event_notification_request
-                            .tech_info
-                            .clone()
-                            .unwrap_or("".to_string()),
-                    ),
-                );
-
                 serde_json::to_value(&handle_security_event_notification_request(
                     &security_event_notification_request,
                 )?)?
@@ -356,14 +268,6 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
                 let signed_firmware_status_notification_request = serde_json::from_value::<
                     firmware_status_notification::FirmwareStatusNotificationRequest,
                 >(request.json)?;
-
-                let _ = self.db_connection.execute(
-                    "INSERT INTO signed_firmware_status_notification (status) VALUES(?1);",
-                    (
-                        serde_json::to_string(&signed_firmware_status_notification_request.status)
-                            .unwrap_or("".to_string()),
-                    ),
-                );
 
                 serde_json::to_value(&handle_signed_firmware_status_notification_request(
                     &signed_firmware_status_notification_request,

@@ -21,6 +21,8 @@ use ocpp::{
     trigger_message_builder::TriggerMessageBuilder,
 };
 
+use rusqlite::Connection;
+
 //-------------------------------------------------------------------------------------------------
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -113,12 +115,16 @@ pub fn setup_initial_configuration(config: &Config) -> Result<Vec<RequestToSend>
 //-------------------------------------------------------------------------------------------------
 
 /// Main entry point. Basically only a wrapper to enable integration tests
-pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
-    info!("Starting OCPPCentralSystem v{} - {}", VERSION, GIT_COMMIT_HASH);
+pub fn run(config: &Config, db_connection: Arc<Mutex<Connection>>) -> Result<(), Box<dyn Error>> {
+    info!(
+        "Starting OCPPCentralSystem v{} - {}",
+        VERSION, GIT_COMMIT_HASH
+    );
     let hooks = Arc::new(Mutex::new(OcppHooks::new(
         Arc::new(Mutex::new(FroniusApiAdapter::new(&config.fronius)?)),
         Arc::new(Mutex::new(AwattarApiAdapter::default())),
         config.clone(),
+        db_connection,
     )));
 
     ocpp::run::<OcppHooks<FroniusApiAdapter, AwattarApiAdapter>>(

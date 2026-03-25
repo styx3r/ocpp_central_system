@@ -36,7 +36,7 @@ pub(crate) fn handle_boot_notification_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uom::si::{f64::*, power::watt, electric_potential::volt, electric_current::ampere};
+    use uom::si::{electric_current::ampere, electric_potential::volt, f64::*, power::watt};
 
     static UNITTEST_CHARGING_POINT_MODEL: &str = "MODEL";
     static UNITTEST_CHARGE_POINT_VENDOR: &str = "VENDOR";
@@ -57,7 +57,9 @@ mod tests {
             default_system_voltage: ElectricPotential::new::<volt>(UNITTEST_SYSTEM_VOLTAGE),
             default_current: ElectricCurrent::new::<ampere>(UNITTEST_DEFAULT_CURRENT),
             default_cos_phi: UNITTEST_COS_PHI,
-            minimum_charging_current: ElectricCurrent::new::<ampere>(UNITTEST_MINIMUM_CHARGING_CURRENT),
+            minimum_charging_current: ElectricCurrent::new::<ampere>(
+                UNITTEST_MINIMUM_CHARGING_CURRENT,
+            ),
             config_parameters: vec![],
         }
     }

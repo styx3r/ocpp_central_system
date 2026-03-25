@@ -8,7 +8,6 @@ mod ocpp_types;
 mod visitor;
 
 use log::{debug, error, info, trace};
-use rusqlite::{Connection, Result};
 use std::process::exit;
 use std::{error::Error, net::TcpListener};
 use tungstenite::{Utf8Bytes, accept};
@@ -27,21 +26,19 @@ use std::sync::{Arc, Mutex};
 pub use uom::{
     fmt::DisplayStyle,
     si::{
+        Unit,
         electric_current::ampere,
         electric_potential::volt,
         energy::watt_hour,
-        f64::{ElectricCurrent, ElectricPotential, Energy, Power},
+        f64::{ElectricCurrent, ElectricPotential, Energy, Frequency, Power, TemperatureInterval},
+        frequency::hertz,
         power::watt,
+        temperature_interval::degree_celsius,
     },
 };
 
 //-------------------------------------------------------------------------------------------------
 
-pub use builders::{
-    MessageBuilder, charging_profile_builder, clear_charging_profile_builder,
-    remote_start_transaction_builder, remote_stop_transaction_builder,
-    set_charging_profile_builder,
-};
 pub use rust_ocpp::v1_6::messages::{
     authorize::AuthorizeRequest, status_notification::StatusNotificationRequest,
 };
@@ -120,17 +117,6 @@ pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizati
 ) -> Result<(), Box<dyn Error>> {
     std::fs::create_dir_all(&config.log_directory)?;
 
-    let db_connection = match Connection::open(format!("{}/ocpp.sqlite", &config.log_directory)) {
-        Ok(c) => c,
-        Err(e) => {
-            error!(
-                "Could not open DB connection with reason: \"{}\"",
-                e.to_string()
-            );
-            exit(1);
-        }
-    };
-
     let listen_address = format!("{}:{}", config.websocket.ip, config.websocket.port);
     let server = match TcpListener::bind(&listen_address) {
         Ok(l) => l,
@@ -156,15 +142,11 @@ pub fn run<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizati
 
     for stream in server.incoming() {
         let handle = stream?;
-        let peer_address = handle.peer_addr()?.ip().to_string();
-
         let charge_point_state = Arc::new(Mutex::new(ChargePointState::with_initial_requests(
             initial_requests,
         )));
 
         let mut ocpp_central_system = OCPPCentralSystem::new(
-            db_connection,
-            peer_address,
             config.to_owned(),
             charge_point_state,
             ocpp_hooks,

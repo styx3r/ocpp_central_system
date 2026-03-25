@@ -3,8 +3,8 @@ use rust_ocpp::v1_6::{
     types::{AuthorizationStatus, IdTagInfo},
 };
 
-use crate::ocpp_types::CustomError;
 use crate::ChargePointState;
+use crate::ocpp_types::CustomError;
 
 //------------------------------------------------------------------------------------------------
 
@@ -24,7 +24,9 @@ pub(crate) fn handle_stop_transaction_request(
         _ => (AuthorizationStatus::Invalid, None),
     };
 
-    if authorization_status == AuthorizationStatus::Accepted && let Some(transaction) = transaction {
+    if authorization_status == AuthorizationStatus::Accepted
+        && let Some(transaction) = transaction
+    {
         charge_point_state
             .running_transactions
             .retain(|e| *e != transaction);
@@ -44,8 +46,8 @@ pub(crate) fn handle_stop_transaction_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rust_ocpp::v1_6::types::Reason;
     use crate::charge_point_state::Transaction;
+    use rust_ocpp::v1_6::types::Reason;
 
     static UNITTEST_ID_TAG: &str = "ID_TAG";
     static UNITTEST_TRANSACTION_ID: i32 = 1;
@@ -84,7 +86,7 @@ mod tests {
             id_tag: Some(UNITTEST_ID_TAG.to_string()),
             transaction_id: UNITTEST_TRANSACTION_ID,
             meter_value_start: 0,
-            meter_value_stop: 0
+            meter_value_stop: 0,
         });
 
         let response = handle_stop_transaction_request(
@@ -119,7 +121,7 @@ mod tests {
             id_tag: Some(UNITTEST_ID_TAG.to_string()),
             transaction_id: UNITTEST_TRANSACTION_ID,
             meter_value_start: 0,
-            meter_value_stop: 0
+            meter_value_stop: 0,
         });
 
         let response = handle_stop_transaction_request(

@@ -14,7 +14,7 @@ use ocpp::{
 
 use chrono::Utc;
 
-use crate::hooks::{CONNECTOR_ID, TX_PV_PREPARATION_CHARGING_PROFILE_ID};
+use crate::hooks::{CONNECTOR_ID, Persistence, TX_PV_PREPARATION_CHARGING_PROFILE_ID};
 
 /// Builds a ClearChargingProfileRequest and disables smart charging.
 fn clear_tx_charging_profiles(
@@ -65,6 +65,11 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
         authorization_request: &AuthorizeRequest,
         charge_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        Persistence::store_authorize_request(
+            &self.db_connection.lock().unwrap(),
+            &authorization_request,
+        )?;
+
         let id_tag = self
             .config
             .id_tags
@@ -154,6 +159,7 @@ mod tests {
     use crate::hooks::TX_GRID_BASED_CHARGING_PROFILE_ID;
 
     use super::*;
+    use rusqlite::Connection;
 
     fn parse_message_request<T: DeserializeOwned>(payload: &str) -> T {
         let message_request =
@@ -210,6 +216,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             test_config,
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -236,6 +243,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::new(Mutex::new(AwattarApiMock::default())),
             test_config,
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -291,6 +299,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::clone(&awattar_mock),
             test_config,
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         awattar_mock.lock().unwrap().set_response(awattar::Period {
@@ -345,6 +354,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::clone(&awattar_mock),
             test_config,
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         awattar_mock.lock().unwrap().set_response(awattar::Period {
@@ -397,6 +407,7 @@ mod tests {
             Arc::new(Mutex::new(FroniusMock::default())),
             Arc::clone(&awattar_mock),
             test_config,
+            Arc::new(Mutex::new(Connection::open_in_memory()?)),
         )));
 
         let mut charge_point_state = ChargePointState::default();

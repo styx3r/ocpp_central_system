@@ -8,7 +8,10 @@ use ocpp::{
 };
 use std::time::Duration;
 
-use crate::{OcppHooks, hooks::CONNECTOR_ID};
+use crate::{
+    OcppHooks,
+    hooks::{CONNECTOR_ID, persistence::Persistence},
+};
 
 //-------------------------------------------------------------------------------------------------
 
@@ -82,6 +85,11 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
             "Evaluating OcppStatusNotificationHook {:?}",
             status_notification.status
         );
+
+        Persistence::store_status_notification(
+            &self.db_connection.lock().unwrap(),
+            &status_notification,
+        )?;
 
         let charge_point_status = charge_point_state.get_charge_point_status();
         if charge_point_status.is_none() {
@@ -233,6 +241,7 @@ mod tests {
     use fronius::FroniusMock;
     use ocpp::OcppStatusNotificationHook;
     use ocpp::{ElectricCurrent, ElectricPotential, Energy, Power, ampere, volt, watt, watt_hour};
+    use rusqlite::Connection;
     use rust_ocpp::v1_6::{
         messages::{
             clear_charging_profile::ClearChargingProfileRequest,
@@ -318,6 +327,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -359,6 +369,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -402,6 +413,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -444,6 +456,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state =
@@ -514,6 +527,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -558,6 +572,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state =
@@ -627,6 +642,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state =
@@ -694,6 +710,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -738,6 +755,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -782,6 +800,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state =
@@ -849,6 +868,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state =
@@ -916,6 +936,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -960,6 +981,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state =
@@ -1027,6 +1049,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state =
@@ -1094,6 +1117,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -1138,6 +1162,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state =
@@ -1205,6 +1230,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state =
@@ -1272,6 +1298,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state = ChargePointState::default();
@@ -1316,6 +1343,7 @@ mod tests {
                 Arc::clone(&fronius_mock),
                 Arc::new(Mutex::new(AwattarApiMock::default())),
                 test_config(),
+                Arc::new(Mutex::new(Connection::open_in_memory()?)),
             )));
 
         let mut charge_point_state = ChargePointState::default();

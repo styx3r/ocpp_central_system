@@ -54,7 +54,12 @@ impl AwattarApi for AwattarApiAdapter {
         let response = reqwest::blocking::Client::new().get(url.clone()).send()?;
 
         if response.status() != StatusCode::OK {
-            return Err(format!("Request returned with status {}: {}", response.status(), url).into());
+            return Err(format!(
+                "Request returned with status {}: {}",
+                response.status(),
+                url
+            )
+            .into());
         }
 
         let market_data = self.parse_api_response(response.text()?.as_str())?;

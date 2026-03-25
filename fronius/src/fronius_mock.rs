@@ -26,7 +26,7 @@ impl FroniusApi for FroniusMock {
     ) -> Result<PowerFlowRealtimeData, Box<dyn std::error::Error>> {
         match &self.power_flow_realtime_data {
             Some(power_flow_realtime_data) => Ok(power_flow_realtime_data.clone()),
-            _ => Err("Empty power flow data".into())
+            _ => Err("Empty power flow data".into()),
         }
     }
 }
