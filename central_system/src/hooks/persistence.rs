@@ -11,19 +11,19 @@ impl Persistence {
     pub fn setup(db_connection: &Connection) -> Result<usize, rusqlite::Error> {
         // AuthorizeRequest
         db_connection.execute(
-            "CREATE TABLE IF NOT EXISTS authorize_requests (id INT PRIMARY KEY AUTOINCREMENT, timestamp INT, id_tag TEXT);",
+            "CREATE TABLE IF NOT EXISTS authorize_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INT, id_tag TEXT);",
             (),
         )?;
 
         // StatusNotification
         db_connection.execute(
-            "CREATE TABLE IF NOT EXISTS status_notifications (id INT PRIMARY KEY AUTOINCREMENT, connector_id INT, error_code TEXT, info TEXT, status TEXT, timestamp INT, vendor_id TEXT, vendor_error_code TEXT);",
+            "CREATE TABLE IF NOT EXISTS status_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, connector_id INT, error_code TEXT, info TEXT, status TEXT, timestamp INT, vendor_id TEXT, vendor_error_code TEXT);",
             ()
         )?;
 
         // MeterReadings
         db_connection.execute(
-            "CREATE TABLE IF NOT EXISTS meter_readings (id INT PRIMARY KEY AUTOINCREMENT, name TEXT, timestamp INT, value REAL, unit TEXT, phase TEXT);",
+            "CREATE TABLE IF NOT EXISTS meter_readings (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, timestamp INT, value REAL, unit TEXT, phase TEXT);",
             ()
         )
     }

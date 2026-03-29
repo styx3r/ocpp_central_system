@@ -79,6 +79,8 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
                 "Given IdTag is not configured!".to_owned(),
             ))?;
 
+        // TODO(styx3r): Move persistence to this line to provide smart charging mode
+
         if !charge_point_state.get_running_transaction_ids().is_empty() {
             clear_tx_charging_profiles(charge_point_state)?;
         }
