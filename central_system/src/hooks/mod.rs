@@ -328,7 +328,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                 overproduction += power_active_imported.unwrap_or(Power::new::<watt>(0.0));
 
                 info!(
-                    "Current PV overproduction {} + {} + {} + {} = {}W",
+                    "Current PV overproduction {} + {} + {} + {} = {}",
                     power_pv.into_format_args(watt, DisplayStyle::Abbreviation),
                     power_load.into_format_args(watt, DisplayStyle::Abbreviation),
                     if power_akku < Power::new::<watt>(0.0) {
@@ -341,6 +341,8 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                         .into_format_args(watt, DisplayStyle::Abbreviation),
                     overproduction.into_format_args(watt, DisplayStyle::Abbreviation)
                 );
+
+                // TODO(styx3r): Store values to persistence
 
                 self.pv_overproduction.push(overproduction);
             }
