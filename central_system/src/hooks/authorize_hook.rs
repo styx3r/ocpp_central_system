@@ -2,7 +2,7 @@ use crate::OcppHooks;
 use awattar::AwattarApi;
 use config::config::SmartChargingMode;
 use fronius::FroniusApi;
-use log::info;
+use log::{error, info};
 
 use ocpp::{
     AuthorizeRequest, ChargePointState, ChargingProfileKindType, ChargingProfilePurposeType,
@@ -65,11 +65,6 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
         authorization_request: &AuthorizeRequest,
         charge_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        Persistence::store_authorize_request(
-            &self.db_connection.lock().unwrap(),
-            &authorization_request,
-        )?;
-
         let id_tag = self
             .config
             .id_tags
@@ -79,7 +74,10 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppAuthorizationHook for OcppHooks<T, 
                 "Given IdTag is not configured!".to_owned(),
             ))?;
 
-        // TODO(styx3r): Move persistence to this line to provide smart charging mode
+        match Persistence::store_authorize_request(&self.db_connection.lock().unwrap(), &id_tag) {
+            Ok(_) => { info!("Stored AuthorizeRequest within persistence") }
+            Err(e) => error!("Persistence failed with error: {}", e),
+        }
 
         if !charge_point_state.get_running_transaction_ids().is_empty() {
             clear_tx_charging_profiles(charge_point_state)?;

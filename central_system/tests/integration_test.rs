@@ -966,7 +966,13 @@ fn repeated_pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Err
 
     assert_eq!(
         integration_test.get_stored_authorize_requests()?,
-        vec![PV_SMART_CHARGING_ID; 2]
+        vec![
+            (
+                PV_SMART_CHARGING_ID.to_string(),
+                config::SmartChargingMode::PVOverProduction.to_string()
+            );
+            2
+        ]
     );
 
     integration_test.teardown(config.log_directory.as_str());

@@ -410,7 +410,7 @@ impl<T: FroniusApi, U: AwattarApi> OcppHooks<T, U> {
                     .floor::<ampere>();
 
                 info!(
-                    "Resulting in {} A charging current",
+                    "Resulting in {} charging current",
                     possible_charging_current.into_format_args(ampere, DisplayStyle::Abbreviation)
                 );
 

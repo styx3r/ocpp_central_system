@@ -219,7 +219,7 @@ fn update_price_chart() -> Result<(), Box<dyn Error>> {
             let end_hour = Local.timestamp_millis_opt(end_param).unwrap().hour();
 
             return Duration::milliseconds(Local::now().timestamp_millis() - start_param)
-                <= Duration::milliseconds(20)
+                <= Duration::milliseconds(50)
                 && Duration::milliseconds(end_param - start_param) <= Duration::hours(24)
                 && end_hour == 6;
         });

@@ -2,6 +2,7 @@ use crate::{OcppHooks, hooks::persistence::Persistence};
 use awattar::AwattarApi;
 use config::config::SmartChargingMode;
 use fronius::FroniusApi;
+use log::{error, info};
 
 use std::sync::Arc;
 
@@ -37,10 +38,13 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppMeterValuesHook for OcppHooks<T, U>
         &mut self,
         charging_point_state: &mut ChargePointState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        Persistence::store_meter_readings(
+        match Persistence::store_meter_readings(
             &self.db_connection.lock().unwrap(),
             charging_point_state.get_measurand(),
-        )?;
+        ) {
+            Ok(_) => info!("Stored MeterValueRequest within persistence"),
+            Err(e) => error!("Persistence failed with error: {}", e),
+        }
 
         self.calculate_cos_phi(charging_point_state)?;
 

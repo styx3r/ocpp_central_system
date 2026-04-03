@@ -1,6 +1,6 @@
 use awattar::AwattarApi;
 use fronius::FroniusApi;
-use log::info;
+use log::{error, info};
 use ocpp::{
     ChargePointState, ChargePointStatus, ChargingProfilePurposeType, MessageBuilder,
     MessageTypeName, StatusNotificationRequest,
@@ -86,10 +86,13 @@ impl<T: FroniusApi, U: AwattarApi> ocpp::OcppStatusNotificationHook for OcppHook
             status_notification.status
         );
 
-        Persistence::store_status_notification(
+        match Persistence::store_status_notification(
             &self.db_connection.lock().unwrap(),
             &status_notification,
-        )?;
+        ) {
+            Ok(_) => info!("Stored StatusNotificationRequest within persistence"),
+            Err(e) => error!("Persistence failed with error: {}", e),
+        }
 
         let charge_point_status = charge_point_state.get_charge_point_status();
         if charge_point_status.is_none() {

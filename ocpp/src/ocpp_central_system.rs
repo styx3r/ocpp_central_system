@@ -41,7 +41,7 @@ use crate::{
 };
 
 use config::config::Config;
-use log::{info, trace};
+use log::{info, trace, warn};
 
 use tungstenite::Utf8Bytes;
 
@@ -115,6 +115,17 @@ impl<T: OcppStatusNotificationHook + OcppMeterValuesHook + OcppAuthorizationHook
 
     pub fn get_pending_message(&mut self) -> Option<RequestToSend> {
         if self.waiting_for_response() {
+            warn!(
+                "Still waiting for {} to be confirmed!",
+                self.charge_point_state
+                    .lock()
+                    .unwrap()
+                    .requests_awaiting_confirmation
+                    .iter()
+                    .map(|e| e.message_type.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
             return None;
         }
 

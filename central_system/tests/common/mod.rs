@@ -154,10 +154,10 @@ impl IntegrationTest {
             .collect::<Vec<_>>())
     }
 
-    pub fn get_stored_authorize_requests(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    pub fn get_stored_authorize_requests(&self) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
         let handle = self.connection.lock().unwrap();
-        let mut stmt = handle.prepare("SELECT id_tag FROM authorize_requests")?;
-        let authorize_requests_iter = stmt.query_map([], |row| Ok(row.get::<usize, String>(0)?))?;
+        let mut stmt = handle.prepare("SELECT id_tag, smart_charging_mode FROM authorize_requests")?;
+        let authorize_requests_iter = stmt.query_map([], |row| Ok((row.get::<usize, String>(0)?, row.get::<usize, String>(1)?)))?;
 
         Ok(authorize_requests_iter
             .map(|e| e.expect("Mismatched type"))

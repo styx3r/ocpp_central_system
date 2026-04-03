@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
+use config::config::IdTag;
 use ocpp::{
-    AuthorizeRequest, ElectricCurrent, ElectricPotential, Energy, Frequency, Measurand,
-    MultiPhaseMeasurand, Phase, Power, StatusNotificationRequest, TemperatureInterval, Unit,
+    ElectricCurrent, ElectricPotential, Energy, Frequency, Measurand, MultiPhaseMeasurand, Phase,
+    Power, StatusNotificationRequest, TemperatureInterval, Unit,
 };
 use rusqlite::Connection;
 
@@ -11,7 +12,7 @@ impl Persistence {
     pub fn setup(db_connection: &Connection) -> Result<usize, rusqlite::Error> {
         // AuthorizeRequest
         db_connection.execute(
-            "CREATE TABLE IF NOT EXISTS authorize_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INT, id_tag TEXT);",
+            "CREATE TABLE IF NOT EXISTS authorize_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INT, id_tag TEXT, smart_charging_mode TEXT);",
             (),
         )?;
 
@@ -30,14 +31,11 @@ impl Persistence {
 
     pub fn store_authorize_request(
         db_connection: &Connection,
-        authorize_request: &AuthorizeRequest,
+        id_tag: &IdTag,
     ) -> Result<usize, rusqlite::Error> {
         db_connection.execute(
-            "INSERT INTO authorize_requests (timestamp, id_tag) VALUES (?1, ?2);",
-            (
-                Utc::now().timestamp_millis(),
-                authorize_request.id_tag.clone(),
-            ),
+            "INSERT INTO authorize_requests (timestamp, id_tag, smart_charging_mode) VALUES (?1, ?2, ?3);",
+            (Utc::now().timestamp_millis(), id_tag.id.clone(), id_tag.smart_charging_mode.to_string()),
         )
     }
 
@@ -60,7 +58,12 @@ impl Persistence {
         )?;
 
         if let Some(current_offered) = measurand.current_offered {
-            MeterReadingsStorer::store_phase(db_connection, "CurrentOffered", now, &current_offered)?;
+            MeterReadingsStorer::store_phase(
+                db_connection,
+                "CurrentOffered",
+                now,
+                &current_offered,
+            )?;
         }
 
         if let Some(energy_active_export_register) = measurand.energy_active_export_register {
