@@ -160,5 +160,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         };
 
-    ocppcentral_system::run(&config, Arc::new(Mutex::new(db_connection)))
+    match ocppcentral_system::run(&config, Arc::new(Mutex::new(db_connection))) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            error!("Could not run. Exiting with error: {}", e);
+            exit(1);
+        }
+    }
 }

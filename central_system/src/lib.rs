@@ -120,6 +120,7 @@ pub fn run(config: &Config, db_connection: Arc<Mutex<Connection>>) -> Result<(),
         "Starting OCPPCentralSystem v{} - {}",
         VERSION, GIT_COMMIT_HASH
     );
+
     let hooks = Arc::new(Mutex::new(OcppHooks::new(
         Arc::new(Mutex::new(FroniusApiAdapter::new(&config.fronius)?)),
         Arc::new(Mutex::new(AwattarApiAdapter::default())),

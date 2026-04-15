@@ -1,6 +1,6 @@
 mod common;
 
-use std::{error::Error, vec};
+use std::{error::Error, net::TcpListener, vec};
 
 use awattar::Period;
 use chrono::{Duration, Utc};
@@ -16,12 +16,16 @@ use uuid::Uuid;
 
 //-------------------------------------------------------------------------------------------------
 
-fn default_config(websocket_port: u32, id_tags: Vec<IdTag>) -> config::Config {
+fn default_config(id_tags: Vec<IdTag>) -> config::Config {
     let log_directory = format!("/tmp/integration_tests/{}", Uuid::new_v4());
     config::Config {
         websocket: config::Websocket {
             ip: "127.0.0.1".to_owned(),
-            port: websocket_port,
+            port: TcpListener::bind(("127.0.0.1", 0))
+                .expect("No port available")
+                .local_addr()
+                .expect("Could not find local address")
+                .port() as u32,
         },
         charging_point: config::ChargePoint {
             serial_number: "".to_owned(),
@@ -62,7 +66,7 @@ static SUSPENDEDEV_STATUS_NOTIFCATION: &str = "SuspendedEV";
 
 #[test]
 fn authorize_request() -> Result<(), Box<dyn Error>> {
-    let config = default_config(8080, vec![]);
+    let config = default_config(vec![]);
     let mut integration_test = common::IntegrationTest::new(config.clone());
     integration_test.setup();
     integration_test.validate_initial_messages()?;
@@ -78,7 +82,7 @@ fn authorize_request() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn boot_notification() -> Result<(), Box<dyn Error>> {
-    let config = default_config(8081, vec![]);
+    let config = default_config(vec![]);
     let mut integration_test = common::IntegrationTest::new(config.clone());
     integration_test.setup();
     integration_test.validate_initial_messages()?;
@@ -90,7 +94,7 @@ fn boot_notification() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn meter_values_request() -> Result<(), Box<dyn Error>> {
-    let config = default_config(8082, vec![]);
+    let config = default_config(vec![]);
 
     let mut integration_test = common::IntegrationTest::new(config.clone());
     integration_test.setup();
@@ -112,7 +116,7 @@ fn meter_values_request() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn start_transaction_blocked() -> Result<(), Box<dyn Error>> {
-    let config = default_config(8083, vec![]);
+    let config = default_config(vec![]);
     let mut integration_test = common::IntegrationTest::new(config.clone());
     integration_test.setup();
     integration_test.validate_initial_messages()?;
@@ -131,7 +135,6 @@ fn start_transaction_blocked() -> Result<(), Box<dyn Error>> {
 #[test]
 fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
     let config = default_config(
-        8084,
         vec![config::IdTag {
             id: "VALID_ID_TAG".to_string(),
             smart_charging_mode: config::SmartChargingMode::Instant,
@@ -154,7 +157,7 @@ fn start_transaction_accepted() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn charging_status_notification() -> Result<(), Box<dyn Error>> {
-    let config = default_config(8085, vec![]);
+    let config = default_config(vec![]);
     let mut integration_test = common::IntegrationTest::new(config.clone());
     integration_test.setup();
     integration_test.validate_initial_messages()?;
@@ -171,7 +174,7 @@ fn charging_status_notification() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn stop_transaction_blocked() -> Result<(), Box<dyn Error>> {
-    let config = default_config(8086, vec![]);
+    let config = default_config(vec![]);
     let mut integration_test = common::IntegrationTest::new(config.clone());
     integration_test.setup();
     integration_test.validate_initial_messages()?;
@@ -187,7 +190,7 @@ fn stop_transaction_blocked() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn heartbeat() -> Result<(), Box<dyn Error>> {
-    let config = default_config(8087, vec![]);
+    let config = default_config(vec![]);
     let mut integration_test = common::IntegrationTest::new(config.clone());
     integration_test.setup();
     integration_test.validate_initial_messages()?;
@@ -203,7 +206,7 @@ fn heartbeat() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn available_status_notification() -> Result<(), Box<dyn Error>> {
-    let config = default_config(8088, vec![]);
+    let config = default_config(vec![]);
     let mut integration_test = common::IntegrationTest::new(config.clone());
     integration_test.setup();
     integration_test.validate_initial_messages()?;
@@ -220,7 +223,7 @@ fn available_status_notification() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn suspendedev_status_notification() -> Result<(), Box<dyn Error>> {
-    let config = default_config(8089, vec![]);
+    let config = default_config(vec![]);
     let mut integration_test = common::IntegrationTest::new(config.clone());
     integration_test.setup();
     integration_test.validate_initial_messages()?;
@@ -241,7 +244,6 @@ fn suspendedev_status_notification() -> Result<(), Box<dyn Error>> {
 fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
     static GRID_BASED_SMART_CHARGING_ID: &str = "GRID_BASED_SMART_CHARGING";
     let config = default_config(
-        8090,
         vec![IdTag {
             id: GRID_BASED_SMART_CHARGING_ID.to_owned(),
             smart_charging_mode: config::SmartChargingMode::PVOverProductionAndGridBased,
@@ -324,7 +326,6 @@ fn grid_based_smart_charging() -> Result<(), Box<dyn Error>> {
 fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
     static GRID_BASED_SMART_CHARGING_ID: &str = "GRID_BASED_SMART_CHARGING";
     let mut config = default_config(
-        8091,
         vec![IdTag {
             id: GRID_BASED_SMART_CHARGING_ID.to_owned(),
             smart_charging_mode: config::SmartChargingMode::PVOverProductionAndGridBased,
@@ -451,7 +452,6 @@ fn grid_based_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Erro
 fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
     static PV_SMART_CHARGING_ID: &str = "PV_SMART_CHARGING";
     let mut config = default_config(
-        8092,
         vec![IdTag {
             id: PV_SMART_CHARGING_ID.to_owned(),
             smart_charging_mode: config::SmartChargingMode::PVOverProduction,
@@ -554,7 +554,6 @@ fn pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
 fn repeated_pv_smart_charging_with_pv_overproduction() -> Result<(), Box<dyn Error>> {
     static PV_SMART_CHARGING_ID: &str = "PV_SMART_CHARGING";
     let mut config = default_config(
-        8093,
         vec![IdTag {
             id: PV_SMART_CHARGING_ID.to_owned(),
             smart_charging_mode: config::SmartChargingMode::PVOverProduction,

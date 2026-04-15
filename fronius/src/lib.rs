@@ -25,7 +25,7 @@ static TIME_OF_USE_URI: &str = "/api/config/timeofuse";
 
 static GET_POWER_FLOW_REALTIME_DATA: &str = "/solar_api/v1/GetPowerFlowRealtimeData.fcgi";
 
-static SUPPORTED_COMMANDS_API_VERSION: &str = "8.4.1";
+static SUPPORTED_COMMANDS_API_VERSION: &str = "9.0.0";
 static SUPPORTED_CONFIG_API_VERSION: &str = "10.2.0";
 
 static TIMES_OF_USE_WRITE_SUCCESS: &str = "timeofuse";
